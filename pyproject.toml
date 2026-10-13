@@ -1,0 +1,23 @@
+[build-system]
+requires = ["scikit-build-core>=0.10", "pybind11>=2.13"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "arbiter"
+version = "0.1.0"
+description = "Prediction-market pricing and trading research: calibration, cross-venue and combinatorial mispricing, market-making backtests (C++20 core)"
+requires-python = ">=3.10"
+dependencies = ["numpy", "pandas", "pyarrow", "duckdb", "httpx", "websockets", "scipy", "statsmodels", "matplotlib", "scikit-learn"]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.scikit-build]
+cmake.build-type = "Release"
+wheel.packages = ["arbiter"]
+build-dir = "build/{wheel_tag}"
+editable.rebuild = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["network: hits the live public APIs (skipped in CI)"]
