@@ -221,6 +221,8 @@ class Recorder:
     # ---- full-listing top-of-book snapshots ----
 
     async def _kalshi_pages(self, client, path, params, key, cap):
+        """Returns (items, complete): complete is False if paging stopped on
+        an error instead of reaching the last page or the cap."""
         out, cursor = [], None
         while len(out) < cap:
             q = dict(params, limit=1000 if key == "markets" else 200)
@@ -232,14 +234,14 @@ class Recorder:
                     break
                 await asyncio.sleep(5 * (attempt + 1))
             if r.status_code != 200:
-                break
+                return out, False
             d = r.json()
             out += d.get(key) or []
             cursor = d.get("cursor")
             if not cursor:
-                break
+                return out, True
             await asyncio.sleep(0.7)
-        return out
+        return out, True
 
     async def listing_loop(self, client: httpx.AsyncClient):
         from arbiter.venues.polymarket import Polymarket
@@ -250,10 +252,10 @@ class Recorder:
             t0 = time.monotonic()
             ts = now()
             try:
-                ms = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "exclude"},
-                                              "markets", 150_000)
-                combos = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "only"},
-                                                  "markets", 5_000)
+                ms, ms_ok = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "exclude"},
+                                                     "markets", 150_000)
+                combos, _ = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "only"},
+                                                     "markets", 5_000)
                 for m in ms + combos:
                     cs = m.get("custom_strike") or {}
                     self.sink.add("kalshi", "listing", {
@@ -267,7 +269,7 @@ class Recorder:
                         "legs": json.dumps({"markets": cs.get("Associated Markets"),
                                             "sides": cs.get("Associated Market Sides")}) if cs else None})
                 if time.monotonic() - last_events > 3600:
-                    evs = await self._kalshi_pages(client, "events", {"status": "open"}, "events", 100_000)
+                    evs, _ = await self._kalshi_pages(client, "events", {"status": "open"}, "events", 100_000)
                     for e in evs:
                         self.sink.add("kalshi", "events", {"ts": ts, "event_id": e["event_ticker"],
                                                            "mutually_exclusive": bool(e.get("mutually_exclusive")),
@@ -287,8 +289,12 @@ class Recorder:
                         "close_time": m.get("endDate"), "neg_risk_id": m.get("negRiskMarketID"),
                         "group_title": m.get("groupItemTitle"), "title": m.get("question"),
                         "fees_enabled": bool(m.get("feesEnabled"))})
-                log.info("listing snapshot: %d kalshi (+%d combos), %d polymarket in %.0fs",
-                         len(ms), len(combos), len(pm), time.monotonic() - t0)
+                # Partial snapshots (paging cut short by rate limits) must not
+                # pass for complete ones in the analysis.
+                self.sink.add("kalshi", "snapshots", {"ts": ts, "markets": len(ms), "complete": ms_ok,
+                                                      "seconds": time.monotonic() - t0})
+                log.info("listing snapshot: %d kalshi (+%d combos, complete=%s), %d polymarket in %.0fs",
+                         len(ms), len(combos), ms_ok, len(pm), time.monotonic() - t0)
             except Exception as e:
                 log.warning("listing snapshot failed: %s", e)
             try:

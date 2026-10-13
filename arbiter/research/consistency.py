@@ -42,8 +42,24 @@ def load_listing(venue: str) -> pd.DataFrame:
     if not files:
         return pd.DataFrame()
     d = pd.concat((pd.read_parquet(f) for f in files), ignore_index=True)
+    if venue == "kalshi":
+        d = d[d.ts.isin(complete_kalshi_snapshots(d))]
     # Early Polymarket snapshots repeated markets on window edges (pager bug, fixed)
     return d.drop_duplicates(["ts", "market_id"])
+
+
+def complete_kalshi_snapshots(listing: pd.DataFrame) -> set:
+    """Snapshot times whose Kalshi paging finished. Snapshots recorded before
+    completeness was logged count as complete only if they hold at least 90%
+    of the largest snapshot's market count."""
+    files = sorted(glob.glob(os.path.join(store.ROOT, "recorder", "kalshi", "date=*", "snapshots-*.parquet")))
+    flagged = pd.concat((pd.read_parquet(f) for f in files), ignore_index=True) if files else pd.DataFrame()
+    counts = listing[listing.legs.isna()].groupby("ts").size()
+    ok = set(counts[counts >= 0.9 * counts.max()].index)
+    if len(flagged):
+        ok -= set(flagged.loc[~flagged.complete, "ts"])
+        ok |= set(flagged.loc[flagged.complete, "ts"])
+    return ok
 
 
 def _valid(df: pd.DataFrame) -> pd.Series:
