@@ -31,8 +31,12 @@ def _safe(key: str) -> str:
 
 
 def save_raw(venue: str, kind: str, key: str, obj) -> None:
-    with gzip.open(path("raw", venue, kind, _safe(key) + ".json.gz"), "wt", encoding="utf-8") as f:
+    """Atomic: readers never see a half-written file."""
+    final = path("raw", venue, kind, _safe(key) + ".json.gz")
+    tmp = final + ".tmp"
+    with gzip.open(tmp, "wt", encoding="utf-8") as f:
         json.dump(obj, f)
+    os.replace(tmp, final)
 
 
 def load_raw(venue: str, kind: str, key: str):
@@ -49,8 +53,12 @@ def iter_raw(venue: str, kind: str):
         return
     for name in sorted(os.listdir(d)):
         if name.endswith(".json.gz"):
-            with gzip.open(os.path.join(d, name), "rt", encoding="utf-8") as f:
-                yield name[: -len(".json.gz")], json.load(f)
+            try:
+                with gzip.open(os.path.join(d, name), "rt", encoding="utf-8") as f:
+                    obj = json.load(f)
+            except (EOFError, OSError, json.JSONDecodeError):
+                continue  # still being written by a running crawler (pre-atomic writes)
+            yield name[: -len(".json.gz")], obj
 
 
 class State:
