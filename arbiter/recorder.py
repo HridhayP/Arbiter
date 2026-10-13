@@ -323,9 +323,20 @@ class Recorder:
             except NotImplementedError:
                 pass
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": "arbiter-research/0.1"}) as client:
-            await asyncio.gather(self.watchlist_loop(client), self.kalshi_loop(client), self.poly_loop(),
-                                 self.listing_loop(client), self.flush_loop())
+            tasks = [asyncio.create_task(c) for c in (
+                self.watchlist_loop(client), self.kalshi_loop(client), self.poly_loop(),
+                self.listing_loop(client), self.flush_loop())]
+            await self.stop.wait()
+            # Long awaits (paging, the Polymarket pager's worker thread) don't
+            # check the stop flag; cancel the loops, flush what is buffered and
+            # leave without waiting on the thread.
+            for t in tasks:
+                t.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
         self.sink.flush()
+        log.info("recorder stopped cleanly")
+        logging.shutdown()
+        os._exit(0)
 
 
 def main():
