@@ -12,6 +12,11 @@ Neither venue publishes historical depth, so this builds it going forward.
   REST order book round-robin over the watched markets instead, within a
   request budget, and stores full snapshots.
 
+- Listing snapshots: every 15 minutes, top of book (bid/ask, and sizes on
+  Kalshi) for *every* open market on both venues, plus combo legs and event
+  metadata (mutual exclusivity, neg-risk groups) hourly. This is the dataset
+  for the consistency (R3) and cross-venue (R2) studies across all markets.
+
 The watchlist (most active open markets) is refreshed every 30 minutes.
 Rows are buffered and flushed to data/recorder/<venue>/date=YYYY-MM-DD/
 every minute; a heartbeat line per minute in the log shows coverage, so gaps
@@ -43,6 +48,13 @@ PM_WS = "wss://ws-subscriptions-clob.polymarket.com/ws/market"
 
 def now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _f(x):
+    try:
+        return float(x)
+    except (TypeError, ValueError):
+        return None
 
 
 class Sink:
@@ -206,6 +218,84 @@ class Recorder:
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, 60)
 
+    # ---- full-listing top-of-book snapshots ----
+
+    async def _kalshi_pages(self, client, path, params, key, cap):
+        out, cursor = [], None
+        while len(out) < cap:
+            q = dict(params, limit=1000 if key == "markets" else 200)
+            if cursor:
+                q["cursor"] = cursor
+            for attempt in range(5):
+                r = await client.get(f"{KALSHI}/{path}", params=q)
+                if r.status_code != 429:
+                    break
+                await asyncio.sleep(5 * (attempt + 1))
+            if r.status_code != 200:
+                break
+            d = r.json()
+            out += d.get(key) or []
+            cursor = d.get("cursor")
+            if not cursor:
+                break
+            await asyncio.sleep(0.7)
+        return out
+
+    async def listing_loop(self, client: httpx.AsyncClient):
+        from arbiter.venues.polymarket import Polymarket
+        from arbiter.http import RateLimitedClient
+
+        last_events = 0.0
+        while not self.stop.is_set():
+            t0 = time.monotonic()
+            ts = now()
+            try:
+                ms = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "exclude"},
+                                              "markets", 150_000)
+                combos = await self._kalshi_pages(client, "markets", {"status": "open", "mve_filter": "only"},
+                                                  "markets", 5_000)
+                for m in ms + combos:
+                    cs = m.get("custom_strike") or {}
+                    self.sink.add("kalshi", "listing", {
+                        "ts": ts, "market_id": m["ticker"], "event_id": m.get("event_ticker"),
+                        "yes_bid": _f(m.get("yes_bid_dollars")), "yes_ask": _f(m.get("yes_ask_dollars")),
+                        "bid_size": _f(m.get("yes_bid_size_fp")), "ask_size": _f(m.get("yes_ask_size_fp")),
+                        "last": _f(m.get("last_price_dollars")), "volume_24h": _f(m.get("volume_24h_fp")),
+                        "close_time": m.get("close_time"), "strike": _f(m.get("floor_strike")),
+                        "strike_type": m.get("strike_type"), "title": m.get("title"),
+                        "subtitle": m.get("yes_sub_title"),
+                        "legs": json.dumps({"markets": cs.get("Associated Markets"),
+                                            "sides": cs.get("Associated Market Sides")}) if cs else None})
+                if time.monotonic() - last_events > 3600:
+                    evs = await self._kalshi_pages(client, "events", {"status": "open"}, "events", 100_000)
+                    for e in evs:
+                        self.sink.add("kalshi", "events", {"ts": ts, "event_id": e["event_ticker"],
+                                                           "mutually_exclusive": bool(e.get("mutually_exclusive")),
+                                                           "category": e.get("category"), "title": e.get("title")})
+                    last_events = time.monotonic()
+                # Polymarket: the gamma pager is synchronous; run it in a thread.
+                def poly():
+                    with RateLimitedClient() as c:
+                        return Polymarket(c).active_markets(min_volume=0)
+                pm = await asyncio.to_thread(poly)
+                for m in pm:
+                    tok = json.loads(m.get("clobTokenIds") or "[]")
+                    self.sink.add("polymarket", "listing", {
+                        "ts": ts, "market_id": m.get("conditionId"), "event_id": str((m.get("events") or [{}])[0].get("id")),
+                        "token_yes": tok[0] if tok else None, "yes_bid": _f(m.get("bestBid")), "yes_ask": _f(m.get("bestAsk")),
+                        "last": _f(m.get("lastTradePrice")), "volume_24h": _f(m.get("volume24hr")),
+                        "close_time": m.get("endDate"), "neg_risk_id": m.get("negRiskMarketID"),
+                        "group_title": m.get("groupItemTitle"), "title": m.get("question"),
+                        "fees_enabled": bool(m.get("feesEnabled"))})
+                log.info("listing snapshot: %d kalshi (+%d combos), %d polymarket in %.0fs",
+                         len(ms), len(combos), len(pm), time.monotonic() - t0)
+            except Exception as e:
+                log.warning("listing snapshot failed: %s", e)
+            try:
+                await asyncio.wait_for(self.stop.wait(), timeout=max(60.0, 900 - (time.monotonic() - t0)))
+            except asyncio.TimeoutError:
+                pass
+
     # ---- flushing / heartbeat ----
 
     async def flush_loop(self):
@@ -228,7 +318,7 @@ class Recorder:
                 pass
         async with httpx.AsyncClient(timeout=20, headers={"User-Agent": "arbiter-research/0.1"}) as client:
             await asyncio.gather(self.watchlist_loop(client), self.kalshi_loop(client), self.poly_loop(),
-                                 self.flush_loop())
+                                 self.listing_loop(client), self.flush_loop())
         self.sink.flush()
 
 

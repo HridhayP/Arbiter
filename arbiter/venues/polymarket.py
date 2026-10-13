@@ -43,6 +43,10 @@ class Polymarket:
 
     def closed_market_pages(self, min_volume: float, start: str = "2020-06-01", end: str | None = None,
                             window_days: float = 7.0):
+        yield from self.market_pages(True, min_volume, start, end, window_days)
+
+    def market_pages(self, closed: bool, min_volume: float, start: str = "2020-06-01", end: str | None = None,
+                     window_days: float = 7.0):
         """All closed markets with volume >= min_volume, by end-date windows.
 
         Offset paging is capped, so walk the timeline in windows and page
@@ -65,7 +69,8 @@ class Polymarket:
                     overflow = True
                     break
                 page = self.c.get_json(f"{GAMMA}/markets", {
-                    "closed": "true", "limit": 100, "offset": offset, "volume_num_min": min_volume,
+                    "closed": "true" if closed else "false", **({} if closed else {"active": "true"}),
+                    "limit": 100, "offset": offset, "volume_num_min": min_volume,
                     "end_date_min": lo.strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "end_date_max": hi.strftime("%Y-%m-%dT%H:%M:%SZ"),
                     "order": "id", "ascending": "true"})
@@ -79,19 +84,13 @@ class Polymarket:
                 continue
             yield from pages
 
-    def active_markets(self, min_volume_24h: float = 0, limit: int = 2000) -> list[dict]:
-        out, offset = [], 0
-        while len(out) < limit:
-            page = self.c.get_json(f"{GAMMA}/markets", {
-                "active": "true", "closed": "false", "limit": 500, "offset": offset,
-                "order": "volume24hr", "ascending": "false"})
-            if not page:
-                break
-            out += [m for m in page if (_num(m.get("volume24hr")) or 0) >= min_volume_24h]
-            if (_num(page[-1].get("volume24hr")) or 0) < min_volume_24h:
-                break
-            offset += len(page)
-        return out[:limit]
+    def active_markets(self, min_volume: float = 0, horizon_days: int = 730) -> list[dict]:
+        """Open markets ending between a month ago and `horizon_days` ahead
+        (some open markets have stale end dates)."""
+        now = pd.Timestamp.now(tz="UTC")
+        start = (now - pd.Timedelta(days=30)).strftime("%Y-%m-%d")
+        end = (now + pd.Timedelta(days=horizon_days)).strftime("%Y-%m-%d")
+        return [m for page in self.market_pages(False, min_volume, start, end, window_days=3) for m in page]
 
     def price_history(self, token: str, start: int, end: int, fidelity: int = 60) -> list[dict]:
         r = self.c.get_json(f"{CLOB}/prices-history", {"market": token, "startTs": start, "endTs": end,
