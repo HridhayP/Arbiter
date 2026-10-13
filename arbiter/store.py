@@ -87,8 +87,11 @@ class State:
 
 
 def write_table(name: str, df: pd.DataFrame) -> str:
+    """Atomic, so concurrent jobs rebuilding tables never expose a partial file."""
     p = path("tables", name + ".parquet")
-    df.to_parquet(p, index=False)
+    tmp = f"{p}.{os.getpid()}.tmp"
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, p)
     return p
 
 
