@@ -100,10 +100,17 @@ def polymarket_markets(client, min_volume: float) -> None:
     log.info("polymarket closed markets: %d", n)
 
 
-def polymarket_prices(client, horizon_days: int, workers: int) -> None:
+def polymarket_prices(client, horizon_days: int, workers: int, min_volume: float, per_event: int) -> None:
+    """Hourly price history before close for resolved markets. There are
+    ~500k closed markets over $1k volume (mostly sports micro-markets), so
+    sample: volume >= min_volume and at most `per_event` per event, so no
+    single event or category dominates the calibration sample."""
     api = P.Polymarket(client)
     mk = store.read_table("markets")
-    mk = mk[(mk.venue == "polymarket") & mk.result.isin(["yes", "no"]) & mk.token_yes.notna()]
+    mk = mk[(mk.venue == "polymarket") & mk.result.isin(["yes", "no"]) & mk.token_yes.notna()
+            & (mk.volume >= min_volume)]
+    mk = (mk.sort_values("volume", ascending=False)
+          .groupby(mk.event_id.fillna(mk.market_id), group_keys=False).head(per_event))
     state = store.State("polymarket-prices", every=200)
     rows = [r for r in mk.itertuples() if r.market_id not in state]
     log.info("polymarket prices: %d markets", len(rows))
@@ -152,6 +159,7 @@ def main() -> None:
     ap.add_argument("--horizon-days", type=int, default=7)
     ap.add_argument("--min-volume", type=float, default=500)
     ap.add_argument("--workers", type=int, default=8)
+    ap.add_argument("--per-event", type=int, default=5, help="polymarket-prices: max markets per event")
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
     logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -165,7 +173,7 @@ def main() -> None:
         elif a.job == "polymarket-markets":
             polymarket_markets(c, a.min_volume)
         elif a.job == "polymarket-prices":
-            polymarket_prices(c, a.horizon_days, a.workers)
+            polymarket_prices(c, a.horizon_days, a.workers, a.min_volume, a.per_event)
         else:
             build_tables()
         log.info("requests made: %d", c.requests)
