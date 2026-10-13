@@ -27,6 +27,7 @@ import pandas as pd
 import statsmodels.api as sm
 
 from arbiter.fees import kalshi_fees
+from arbiter.timeutil import utc_us
 
 HORIZONS = {"1h": pd.Timedelta(hours=1), "1d": pd.Timedelta(days=1), "1w": pd.Timedelta(days=7)}
 EPS = 1e-4
@@ -45,8 +46,11 @@ def snapshots(markets: pd.DataFrame, candles: pd.DataFrame, max_staleness: pd.Ti
     the midpoint is a real price, not an empty book); the candle used must be
     at most max_staleness old. Polymarket rows use the history price."""
     m = markets[markets.result.isin(["yes", "no"]) & markets.close_time.notna()].copy()
+    m["close_time"] = utc_us(m.close_time)
+    m["open_time"] = utc_us(m.open_time)
     m["y"] = (m.result == "yes").astype(int)
     c = candles.copy()
+    c["ts"] = utc_us(c.ts)
     c["mid"] = np.where(c.yes_bid.notna() & c.yes_ask.notna(), (c.yes_bid + c.yes_ask) / 2, np.nan)
     c["spread"] = c.yes_ask - c.yes_bid
     is_k = c.venue == "kalshi"
@@ -56,7 +60,7 @@ def snapshots(markets: pd.DataFrame, candles: pd.DataFrame, max_staleness: pd.Ti
     out = []
     for name, h in HORIZONS.items():
         t = m[["venue", "market_id", "close_time", "open_time"]].copy()
-        t["t"] = t.close_time - h
+        t["t"] = utc_us(t.close_time - h)  # timedelta math upcasts to ns
         t = t[(t.open_time.isna()) | (t.open_time <= t.t)].sort_values("t")
         j = pd.merge_asof(t, c[["venue", "market_id", "ts", "price", "yes_bid", "yes_ask", "spread"]],
                           left_on="t", right_on="ts", by=["venue", "market_id"], direction="backward")

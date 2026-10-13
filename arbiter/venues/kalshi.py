@@ -84,6 +84,17 @@ class Kalshi:
         r = self.c.get_json(f"{BASE}/{path}", {"start_ts": start, "end_ts": end, "period_interval": period})
         return (r or {}).get("candlesticks", [])
 
+    def trades(self, ticker: str, min_ts: int | None = None, max_ts: int | None = None,
+               historical: bool = False, limit: int = 200_000) -> list[dict]:
+        """Trade prints for one market (cursor-paginated)."""
+        params = {"ticker": ticker}
+        if min_ts:
+            params["min_ts"] = min_ts
+        if max_ts:
+            params["max_ts"] = max_ts
+        path = "historical/trades" if historical else "markets/trades"
+        return list(self._pages(path, params, "trades", limit))
+
     def orderbook(self, ticker: str) -> dict | None:
         r = self.c.get_json(f"{BASE}/markets/{ticker}/orderbook")
         return (r or {}).get("orderbook_fp") or (r or {}).get("orderbook")
@@ -131,3 +142,14 @@ def candle_rows(market_id: str, candles: list[dict]) -> list[dict]:
             "open_interest": _num(c.get("open_interest_fp", c.get("open_interest"))),
         })
     return rows
+
+
+def trade_rows(trades: list[dict]) -> list[dict]:
+    """taker_side is the side the aggressor bought: "yes" lifted YES offers,
+    "no" bought NO, i.e. sold YES into YES bids."""
+    out = []
+    for t in trades:
+        out.append({"venue": "kalshi", "market_id": t["ticker"], "ts": ts(t["created_time"]),
+                    "price": _dollars(t, "yes_price"), "size": _num(t.get("count_fp", t.get("count"))),
+                    "taker_side": t.get("taker_side")})
+    return out
