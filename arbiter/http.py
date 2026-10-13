@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 import httpx
 
 DEFAULT_RATES = {  # requests per second, deliberately below documented limits
-    "api.elections.kalshi.com": 8.0,
+    "api.elections.kalshi.com": 4.0,  # 8/s drew 429s on /historical
     "gamma-api.polymarket.com": 4.0,
     "clob.polymarket.com": 8.0,
     "data-api.polymarket.com": 4.0,
