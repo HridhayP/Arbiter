@@ -49,3 +49,4 @@ def test_candidates_respect_the_close_time_window(monkeypatch):
     poly = pd.DataFrame({"market_id": ["p1"], "title": ["Will A win?"], "close_time": [t + pd.Timedelta(days=1)]})
     c = M.candidates(kal, poly, k=5, max_gap_days=3, min_cos=0.5)
     assert c.kalshi_id.tolist() == ["k1"]  # k2 closes 9 days apart: excluded
+    assert c.gap_days.round(6).tolist() == [1.0]  # in days, whatever the timestamp resolution

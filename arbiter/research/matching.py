@@ -6,7 +6,11 @@ ranges vs up/down, vote-count thresholds vs winners), so text similarity
 alone produces many near misses. The matcher therefore:
 
 1. generates candidates: for each Polymarket market, the most similar Kalshi
-   markets by sentence embedding among those closing within `max_gap` days;
+   markets by sentence embedding among those closing within `max_gap` days.
+   The window is wide on purpose: on hand-labeled pairs, 35 of 39 genuine
+   matches had close dates more than 3 days apart (one by 364 days), because
+   the venues set official end dates differently for long-running markets;
+   short-dated mismatches are caught by the date-conflict feature instead;
 2. computes features: embedding and TF-IDF similarity, close-time gap,
    agreement of the numbers in each text (strikes, scores, dates), named
    entity overlap, and conflicting years;
@@ -101,7 +105,16 @@ def embed(texts: list[str], batch: int = 256) -> np.ndarray:
     return m.encode(texts, batch_size=batch, normalize_embeddings=True, show_progress_bar=False).astype(np.float32)
 
 
-def candidates(kal: pd.DataFrame, poly: pd.DataFrame, k: int = 5, max_gap_days: float = 3.0,
+_EPOCH = pd.Timestamp("1970-01-01", tz="UTC")
+
+
+def days(ts: pd.Series) -> np.ndarray:
+    """Days since the epoch, independent of the timestamp resolution
+    (pandas 3 defaults to microseconds, so int64 casts are not nanoseconds)."""
+    return ((pd.to_datetime(ts, utc=True) - _EPOCH) / pd.Timedelta(days=1)).values.astype(float)
+
+
+def candidates(kal: pd.DataFrame, poly: pd.DataFrame, k: int = 5, max_gap_days: float = 400.0,
                min_cos: float = 0.55) -> pd.DataFrame:
     """Top-k Kalshi neighbours for each Polymarket market, within the close-time window."""
     kal = kal.reset_index(drop=True)
@@ -109,8 +122,7 @@ def candidates(kal: pd.DataFrame, poly: pd.DataFrame, k: int = 5, max_gap_days: 
     kt = [kalshi_text(r) for r in kal.to_dict("records")]
     pt = [poly_text(r) for r in poly.to_dict("records")]
     ke, pe = embed(kt), embed(pt)
-    kday = (kal.close_time.astype("int64") // 10**9 / 86400).values
-    pday = (poly.close_time.astype("int64") // 10**9 / 86400).values
+    kday, pday = days(kal.close_time), days(poly.close_time)
     # Sort both sides by close day so every block of Polymarket markets is
     # compared with one contiguous slice of Kalshi embeddings (a matmul on a
     # view, no per-market gathers), then mask pairs outside the window.
@@ -174,13 +186,14 @@ def stages(s: str) -> set[str]:
     return {norm.get(m.lower(), m.lower()) for m in _STAGE.findall(s)}
 
 
-FEATURES = ["emb_cos", "tfidf_cos", "gap_days", "num_jaccard_f", "num_conflict", "ent_jaccard_f", "year_conflict",
+FEATURES = ["emb_cos", "tfidf_cos", "log_gap", "num_jaccard_f", "num_conflict", "ent_jaccard_f", "year_conflict",
             "has_nums", "rank_conflict", "date_conflict", "touch_conflict", "stage_conflict"]
 
 
 def design(c: pd.DataFrame) -> np.ndarray:
     x = c.copy()
     x["has_nums"] = x.num_jaccard.notna().astype(float)
+    x["log_gap"] = np.log1p(x.gap_days)
     x["num_jaccard_f"] = x.num_jaccard.fillna(0)
     x["ent_jaccard_f"] = x.ent_jaccard.fillna(0)
     return x[FEATURES].astype(float).values
@@ -188,7 +201,7 @@ def design(c: pd.DataFrame) -> np.ndarray:
 
 def heuristic(c: pd.DataFrame) -> np.ndarray:
     """Transparent pre-label score used to choose pairs to label."""
-    s = c.emb_cos + 0.3 * c.tfidf_cos + 0.2 * c.ent_jaccard.fillna(0) - 0.05 * c.gap_days
+    s = c.emb_cos + 0.3 * c.tfidf_cos + 0.2 * c.ent_jaccard.fillna(0) - 0.02 * np.log1p(c.gap_days)
     s = s - 0.5 * c.num_conflict.astype(float) - 0.5 * c.year_conflict.astype(float)
     for col in ("rank_conflict", "date_conflict", "touch_conflict", "stage_conflict"):
         if col in c:
