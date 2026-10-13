@@ -93,3 +93,16 @@ def test_state_resumes(tmp_path, monkeypatch):
     s.add("c")  # pending
     s.flush()
     assert set(store.State("job").done) == {"a", "b", "c"}
+
+
+def test_polymarket_window_pager_never_repeats_edge_markets():
+    # markets exactly on window boundaries are returned by both windows
+    base = pd.Timestamp("2025-01-01", tz="UTC")
+    ends = [base + pd.Timedelta(days=d) for d in range(0, 15)]
+    api = P.Polymarket(FakeGamma(ends))
+    # FakeGamma uses half-open windows; make it inclusive like the real API
+    api.c.get_json = lambda url, params, f=api.c.get_json: [
+        {"id": str(e.value), "endDate": e.isoformat()} for e in ends
+        if pd.Timestamp(params["end_date_min"]) <= e <= pd.Timestamp(params["end_date_max"])][params["offset"]:params["offset"] + 100]
+    got = [m["id"] for page in api.closed_market_pages(0, start="2025-01-01", end="2025-01-15") for m in page]
+    assert len(got) == len(set(got)) == 15

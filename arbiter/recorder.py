@@ -245,7 +245,7 @@ class Recorder:
         from arbiter.venues.polymarket import Polymarket
         from arbiter.http import RateLimitedClient
 
-        last_events = 0.0
+        last_events = float("-inf")  # monotonic() starts near 0 after boot; fetch on the first pass
         while not self.stop.is_set():
             t0 = time.monotonic()
             ts = now()

@@ -45,10 +45,12 @@ class Kalshi:
     def __init__(self, client: RateLimitedClient):
         self.c = client
 
-    def _pages(self, path: str, params: dict, key: str, limit: int | None = None):
+    def _pages(self, path: str, params: dict, key: str, limit: int | None = None, page_size: int = 1000):
+        """Cursor pagination. Page caps differ by endpoint (markets 1000,
+        events 200; larger values are rejected with HTTP 400)."""
         cursor, n = None, 0
         while True:
-            p = dict(params, limit=min(1000, limit - n) if limit else 1000)
+            p = dict(params, limit=min(page_size, limit - n) if limit else page_size)
             if cursor:
                 p["cursor"] = cursor
             r = self.c.get_json(f"{BASE}/{path}", p)
@@ -74,7 +76,7 @@ class Kalshi:
 
     def events(self, series: str, status: str) -> list[dict]:
         return list(self._pages("events", {"series_ticker": series, "status": status,
-                                           "with_nested_markets": "true"}, "events"))
+                                           "with_nested_markets": "true"}, "events", page_size=200))
 
     def candles(self, series: str, ticker: str, start: int, end: int, period: int, historical: bool) -> list[dict]:
         path = (f"historical/markets/{ticker}/candlesticks" if historical

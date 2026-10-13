@@ -61,6 +61,7 @@ class Polymarket:
             stack.append((t, min(t + pd.Timedelta(days=window_days), t_end)))
             t = stack[-1][1]
         stack.reverse()
+        seen: set[str] = set()  # window bounds are inclusive, so edge markets repeat
         while stack:
             lo, hi = stack.pop()
             pages, offset, overflow = [], 0, False
@@ -82,7 +83,11 @@ class Polymarket:
                 mid = lo + (hi - lo) / 2
                 stack += [(mid, hi), (lo, mid)]
                 continue
-            yield from pages
+            for page in pages:
+                fresh = [m for m in page if str(m.get("id")) not in seen]
+                seen.update(str(m.get("id")) for m in fresh)
+                if fresh:
+                    yield fresh
 
     def active_markets(self, min_volume: float = 0, horizon_days: int = 730) -> list[dict]:
         """Open markets ending between a month ago and `horizon_days` ahead
