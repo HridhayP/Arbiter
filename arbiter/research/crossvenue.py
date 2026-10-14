@@ -106,7 +106,36 @@ def persistence(g: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def run() -> dict:
+NOT_EQUIVALENT = {"false_match", "rules_differ"}
+
+
+def apply_review(g: pd.DataFrame, review: pd.DataFrame) -> pd.DataFrame:
+    """Drops pairs a manual read of both venues' rules found not to be the
+    same proposition. Matched on the Kalshi id and Polymarket question."""
+    bad = review[review.verdict.isin(NOT_EQUIVALENT)][["kalshi_id", "poly_text"]].assign(_bad=True)
+    g = g.merge(bad, on=["kalshi_id", "poly_text"], how="left")
+    return g[g._bad.isna()].drop(columns="_bad")
+
+
+def summarize(g: pd.DataFrame) -> dict:
+    per_pair = g.groupby(["kalshi_id", "poly_id"])
+    res = {
+        "pair_snapshots": int(len(g)), "pairs_quoted": int(per_pair.ngroups),
+        "abs_mid_gap_median_cents": float(g.mid_gap.abs().median() * 100),
+        "abs_mid_gap_p90_cents": float(g.mid_gap.abs().quantile(0.9) * 100),
+        "share_gross_positive": float((g.gross_best > 0).mean()),
+        "share_net_positive": float((g.net_best > 0).mean()),
+        "pairs_ever_net_positive": int(g[g.net_best > 0][["kalshi_id", "poly_id"]].drop_duplicates().shape[0]),
+        "max_net_cents": float(g.net_best.max() * 100),
+    }
+    pers = persistence(g)
+    if len(pers):
+        res["persistence_median_snapshots"] = float(pers.snapshots_positive.median())
+        res["longest_run_max"] = int(pers.longest_run.max())
+    return res
+
+
+def run(review_path: str = "labels/r2_review.csv") -> dict:
     k = R.load_listing("kalshi")
     p = R.load_listing("polymarket")
     pairs = match_listing(k, p)
@@ -115,20 +144,18 @@ def run() -> dict:
     store.write_table("r2_gaps", g) if len(g) else None
     res = {"pairs": int(len(pairs)), "kalshi_snapshots": int(k.ts.nunique()), "polymarket_snapshots": int(p.ts.nunique())}
     if len(g):
-        per_pair = g.groupby(["kalshi_id", "poly_id"])
-        res.update({
-            "pair_snapshots": int(len(g)), "pairs_quoted": int(per_pair.ngroups),
-            "abs_mid_gap_median_cents": float(g.mid_gap.abs().median() * 100),
-            "abs_mid_gap_p90_cents": float(g.mid_gap.abs().quantile(0.9) * 100),
-            "share_gross_positive": float((g.gross_best > 0).mean()),
-            "share_net_positive": float((g.net_best > 0).mean()),
-            "pairs_ever_net_positive": int(g[g.net_best > 0][["kalshi_id", "poly_id"]].drop_duplicates().shape[0]),
-        })
+        res["all_matched"] = summarize(g)
+        review = pd.read_csv(review_path)
+        clean = apply_review(g, review)
+        res["after_review"] = summarize(clean) if len(clean) else {}
+        res["review"] = review.verdict.value_counts().to_dict()
+        # pairs with a positive net gap that nobody has read the rules for yet
+        pos = g[g.net_best > 0][["kalshi_id", "poly_text"]].drop_duplicates()
+        res["unreviewed_positive"] = int(len(pos.merge(review[["kalshi_id", "poly_text"]], how="left", indicator=True)
+                                             .query("_merge == 'left_only'")))
         pers = persistence(g)
         if len(pers):
             store.write_table("r2_persistence", pers)
-            res["persistence_median_snapshots"] = float(pers.snapshots_positive.median())
-            res["longest_run_max"] = int(pers.longest_run.max())
     return res
 
 

@@ -36,3 +36,13 @@ def test_polymarket_fees_are_charged_when_enabled():
 def test_snapshots_too_far_apart_are_not_joined():
     pairs, k, p = frames([(0.53, 0.55)], [(0.62, 0.64)], skew=pd.Timedelta(hours=2))
     assert X.gaps(pairs, k, p).empty
+
+
+def test_review_drops_non_equivalent_pairs():
+    pairs, k, p = frames([(0.53, 0.55)], [(0.62, 0.64)])
+    g = X.gaps(pairs, k, p)
+    review = pd.DataFrame({"kalshi_id": ["K1"], "poly_text": ["x"], "verdict": ["rules_differ"]})
+    assert X.apply_review(g, review).empty
+    review["verdict"] = "equivalent"
+    assert len(X.apply_review(g, review)) == 1
+    assert X.summarize(g)["pairs_ever_net_positive"] == 1
