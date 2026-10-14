@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import argparse
+import itertools
 import logging
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -145,26 +146,37 @@ def polymarket_prices(client, horizon_days: int, workers: int, min_volume: float
     _run_resilient(one, rows, state, workers, len(rows))
 
 
+def _chunked_frame(row_lists, chunk: int = 200_000) -> pd.DataFrame:
+    """Concatenates rows into DataFrames a chunk at a time. Millions of row
+    dicts held at once need several GB; frames are ~10x smaller."""
+    frames, buf = [], []
+    for rows in row_lists:
+        buf += rows
+        if len(buf) >= chunk:
+            frames.append(pd.DataFrame(buf))
+            buf = []
+    if buf:
+        frames.append(pd.DataFrame(buf))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def build_tables() -> None:
     meta = _series_meta()
-    rows = []
-    for series, ms in store.iter_raw("kalshi", "markets"):
-        rows += [K.market_row(m, meta.get(series)) for m in ms]
-    for _, page in store.iter_raw("polymarket", "markets"):
-        rows += [r for r in (P.market_row(m) for m in page) if r]
-    markets = pd.DataFrame(rows).drop_duplicates(["venue", "market_id"])
+    markets = _chunked_frame(itertools.chain(
+        ([K.market_row(m, meta.get(series)) for m in ms] for series, ms in store.iter_raw("kalshi", "markets")),
+        ([r for r in (P.market_row(m) for m in page) if r] for _, page in store.iter_raw("polymarket", "markets")),
+    )).drop_duplicates(["venue", "market_id"])
     store.write_table("markets", markets)
     log.info("markets table: %d rows (%s)", len(markets), markets.venue.value_counts().to_dict())
+    del markets
 
-    candles = []
-    for mid, c in store.iter_raw("kalshi", "candles"):
-        candles += K.candle_rows(mid, c)
-    for mid, h in store.iter_raw("polymarket", "prices"):
-        candles += P.price_rows(mid, h)
-    if candles:
-        cdf = pd.DataFrame(candles)
-        store.write_table("candles", cdf)
-        log.info("candles table: %d rows", len(cdf))
+    candles = _chunked_frame(itertools.chain(
+        (K.candle_rows(mid, c) for mid, c in store.iter_raw("kalshi", "candles")),
+        (P.price_rows(mid, h) for mid, h in store.iter_raw("polymarket", "prices")),
+    ))
+    if len(candles):
+        store.write_table("candles", candles)
+        log.info("candles table: %d rows", len(candles))
 
 
 def main() -> None:

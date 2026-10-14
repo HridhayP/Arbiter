@@ -71,6 +71,9 @@ struct SimConfig {
     FeeModel fees;
     bool fill_on_cross = false;  // for data without trade prints
     double max_position = 1e18;  // hard inventory cap enforced at order entry
+    // Share of the displayed size at our price assumed to be ahead of a new
+    // order: 1 = back of the queue (default), 0 = front. For sensitivity runs.
+    double queue_ahead = 1.0;
 };
 
 class Simulator {

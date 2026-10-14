@@ -66,6 +66,18 @@ TEST(Sim, QueuePositionMustTradeThroughBeforeWeFill) {
     EXPECT_TRUE(sim.orders().empty());
 }
 
+TEST(Sim, QueueAheadShareSetsStartingPosition) {
+    Idle s;
+    SimConfig cfg = no_fees();
+    cfg.queue_ahead = 0.25;  // assume only a quarter of the level is ahead of us
+    Simulator sim = seeded(cfg, s);
+    const int64_t id = sim.place(Side::Bid, 500, 10);
+    EXPECT_DOUBLE_EQ(sim.orders().at(id).ahead, 25);
+    sim.process(trade(2, Side::Bid, 500, 30), s);  // 25 ahead, then 5 to us
+    ASSERT_EQ(sim.fills().size(), 1u);
+    EXPECT_DOUBLE_EQ(sim.fills()[0].qty, 5);
+}
+
 TEST(Sim, TradeThroughOurPriceFillsUsFirst) {
     Idle s;
     Simulator sim = seeded(no_fees(), s);

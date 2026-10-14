@@ -92,14 +92,16 @@ PYBIND11_MODULE(_sim, m) {
         .def("on_fill", &Strategy::on_fill);
 
     py::class_<SimConfig>(m, "SimConfig")
-        .def(py::init([](FeeModel fees, bool fill_on_cross, double max_position) {
+        .def(py::init([](FeeModel fees, bool fill_on_cross, double max_position, double queue_ahead) {
                  SimConfig c;
                  c.fees = fees;
                  c.fill_on_cross = fill_on_cross;
                  c.max_position = max_position;
+                 c.queue_ahead = queue_ahead;
                  return c;
              }),
-             py::arg("fees"), py::arg("fill_on_cross") = false, py::arg("max_position") = 1e18);
+             py::arg("fees"), py::arg("fill_on_cross") = false, py::arg("max_position") = 1e18,
+             py::arg("queue_ahead") = 1.0);
 
     py::class_<Simulator>(m, "Simulator")
         .def(py::init<SimConfig>())

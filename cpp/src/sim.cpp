@@ -36,7 +36,7 @@ int64_t Simulator::place(Side side, int tick, double qty) {
     }
     // Rest at the back of the level: displayed size plus our own earlier
     // orders there are ahead of us.
-    o.ahead = book_.size(side, tick);
+    o.ahead = book_.size(side, tick) * cfg_.queue_ahead;
     for (const auto& [id, other] : orders_)
         if (other.side == side && other.tick == tick) o.ahead += other.qty;
     orders_.emplace(o.id, o);
