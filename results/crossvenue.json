@@ -1,36 +1,35 @@
 {
   "pairs": 128,
-  "kalshi_snapshots": 6,
-  "polymarket_snapshots": 23,
+  "kalshi_snapshots": 12,
+  "polymarket_snapshots": 29,
   "all_matched": {
-    "pair_snapshots": 694,
+    "pair_snapshots": 1384,
     "pairs_quoted": 117,
-    "abs_mid_gap_median_cents": 2.9000000000000004,
-    "abs_mid_gap_p90_cents": 24.350000000000023,
-    "share_gross_positive": 0.345821325648415,
-    "share_net_positive": 0.1844380403458213,
+    "abs_mid_gap_median_cents": 3.0000000000000027,
+    "abs_mid_gap_p90_cents": 24.0,
+    "share_gross_positive": 0.3540462427745665,
+    "share_net_positive": 0.19219653179190752,
     "pairs_ever_net_positive": 29,
     "max_net_cents": 59.9854,
-    "persistence_median_snapshots": 6.0,
-    "longest_run_max": 6
+    "persistence_median_snapshots": 12.0,
+    "longest_run_max": 12
   },
   "after_review": {
-    "pair_snapshots": 580,
-    "pairs_quoted": 98,
-    "abs_mid_gap_median_cents": 2.1999999999999997,
-    "abs_mid_gap_p90_cents": 14.055000000000003,
-    "share_gross_positive": 0.24655172413793103,
-    "share_net_positive": 0.07413793103448275,
-    "pairs_ever_net_positive": 10,
+    "pair_snapshots": 1144,
+    "pairs_quoted": 97,
+    "abs_mid_gap_median_cents": 2.25,
+    "abs_mid_gap_p90_cents": 13.985000000000003,
+    "share_gross_positive": 0.2526223776223776,
+    "share_net_positive": 0.07255244755244755,
+    "pairs_ever_net_positive": 9,
     "max_net_cents": 1.9391999999999923,
-    "persistence_median_snapshots": 6.0,
-    "longest_run_max": 6
+    "persistence_median_snapshots": 12.0,
+    "longest_run_max": 12
   },
   "review": {
     "false_match": 11,
-    "rules_differ": 8,
-    "likely_equivalent": 6,
-    "equivalent": 4
+    "rules_differ": 9,
+    "equivalent": 9
   },
   "unreviewed_positive": 0
 }

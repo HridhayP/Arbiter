@@ -40,10 +40,10 @@ Cross-validated precision is 0.95 at p ≥ 0.7. A pandas 3 unit bug (microsecond
 
 ### 5. Were the cross-venue gaps real arbitrage?
 
-Mostly not. An opportunity counts only if Polymarket's bid minus Kalshi's ask (or the reverse) beats both venues' taker fees. 22 matched pairs showed that, with net gaps of up to 60¢. I read both venues' rules for all 22:
-- **8 false matches.** The largest gaps come from different questions, which is a selection effect: a 95%-precise matcher still puts its 5% errors exactly where the gaps are.
-- **6 with different resolution rules.** Kalshi's Coachella headliner market requires actually performing, while Polymarket's resolves on the poster announcement.
-- **The rest** (equivalent or likely equivalent) had a best net gap of 1.9¢.
+Mostly not. An opportunity counts only if Polymarket's bid minus Kalshi's ask (or the reverse) beats both venues' taker fees. Over about a day of snapshots, 29 matched pairs showed that, with net gaps of up to 60¢. I read both venues' rules for all 29:
+- **11 false matches.** The largest gaps come from different questions, which is a selection effect: a 95%-precise matcher still puts its 5% errors exactly where the gaps are.
+- **9 with different resolution rules.** Kalshi's Coachella headliner market requires actually performing, while Polymarket's resolves on the poster announcement.
+- **9 equivalent pairs** had a best net gap of 1.9¢. Those small gaps were stable across snapshots: real but tiny price differences between venues.
 
 ### 6. Tell me about the consistency checks.
 
@@ -53,8 +53,8 @@ There are three kinds:
 - **Combos:** compared with the product of their legs.
 
 Every apparent violation turned out to have a mundane cause:
-- **Ladders:** Kalshi puts different quantities in one event (rain in several cities), so grouping by event produced 4,933 fake ladder violations. Grouping by ticker minus strike left 15, none profitable after fees.
-- **Polymarket buy-all candidates:** fetching each candidate's full event showed 506 of 510 were missing outcomes from the listing (no "draw" market, for instance).
+- **Ladders:** Kalshi puts different quantities in one event (rain in several cities), so grouping by event produced 4,933 fake ladder violations. Grouping by ticker minus strike left 107 violations in 18 events, none profitable after fees.
+- **Polymarket buy-all candidates:** fetching each candidate's full event showed 586 of 591 were missing outcomes from the listing (no "draw" market, for instance).
 - **Kalshi buy-all candidates:** these were open fields that aren't exhaustive (next Pope, primaries).
 - **The real ones:** NHL "most hat tricks" bids summed to $1.16, and the Maduro sentencing asks summed to $0.976. But the thinnest level had about 1 contract, or the money was locked up for 15 months at less than the T-bill rate.
 
@@ -72,7 +72,16 @@ A binary contract lives in (0, 1), and its price volatility shrinks near the bou
 
 ### 9. Did market making make money?
 
-No. On about 5 hours of recorded Polymarket depth (31 markets with at least 50 trades), parameters were chosen walk-forward on earlier time blocks, and inventory was closed at the touch at the end of each block. At realistic queue position (back of the queue) it lost $15.36 over 1,871 contracts, 0.82¢ per contract. The 5-minute markout was −0.78¢ per contract, so nearly all of the loss is adverse selection: the quoter gets filled just before the price moves against it. Assuming the front of the queue, fills nearly double but the result is still −0.38¢ per contract. Two checks back this up. The trade prints match the reconstructed book: on average 85% of taker buys print at or above the ask, and only 5% at or below the bid, the rest being timing noise between the two feeds. And a unit test shows that marking leftover inventory at the mid, instead of the touch, would have flattered the result.
+No, and the useful part is *why*. On 22 hours of recorded books (64 Polymarket markets with streamed depth, 146 Kalshi markets with books polled every ~30 s plus trade prints), parameters were chosen walk-forward on earlier time blocks. Inventory was closed at the touch at the end of each ~3.7 h block. I split P&L exactly into four parts: spread captured at the fill (vs the mid just before it), inventory drift afterwards, the cost of going flat, and fees.
+
+- **Polymarket, back of the queue:** −2.1¢ per contract, made up of **0.0¢ spread captured**, −0.4¢ drift and −1.7¢ close-out. A quote at the back of the queue only fills once the price has come to it, so it earns nothing. That's adverse selection at the instant of the fill.
+- **Kalshi:** the quoter captures **+1.7¢** per contract, because Kalshi's spreads are wide, but pays −3.5¢ to get flat across those same spreads, plus −0.6¢ drift.
+- **Caveats:**
+  - Without the forced close-out, Kalshi would be +1.1¢ per contract. A real desk works out of inventory passively, so the close-out overstates the cost.
+  - The Kalshi book is 30 s stale, so its quotes are worse-informed than a live quoter's would be.
+  - 5 traded blocks isn't enough for significance (per-block t between −1.0 and −1.7).
+
+I also learned to distrust short samples. On the first 5 hours, the loss looked like pure 5-minute adverse selection; with 4× the data the decomposition told a different story. Two checks back the fill model. Trade prints match the reconstructed book: 83% of Polymarket taker buys print at or above the ask. And a unit test confirms the decomposition adds up exactly.
 
 ### 10. Can a model beat the market's price?
 
@@ -82,7 +91,8 @@ On 58,155 scored markets, gradient boosting improves the Brier score by 0.0007 o
 
 ### 11. What would you do with more time?
 
-- **Record for weeks, not hours.** The market-making sample is small (5 traded blocks), and cross-venue persistence needs many more snapshots.
-- **Add Kalshi trade prints to its book polls,** to run R4 on the second venue with its maker fees.
+- **Record for weeks, not hours.** The market-making sample is small (5 traded blocks), and cross-venue persistence needs many more snapshots. The paper trader (`arbiter.papertrade`, the same quoter on live books) gives an out-of-sample check that accumulates on its own.
+- **Stream Kalshi's book over its WebSocket** (which needs an API key) instead of polling every 30 s, so Kalshi queue positions are as exact as Polymarket's.
+- **Manage inventory instead of dumping it.** Most measured losses are the forced close-out, so working out of positions passively is the obvious next strategy to test.
 - **Model each market's information arrival,** so the quoter can pull before scheduled news (game starts, data releases), where most adverse selection happens.
 - **Read rules automatically.** An LLM pass over both venues' rules text could flag non-equivalent matches before a human reviews them.

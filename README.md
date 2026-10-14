@@ -5,7 +5,7 @@ Arbiter is a research lab for prediction markets (Kalshi and Polymarket). It ask
 1. **Calibration (R1).** Do 90¢ contracts win 90% of the time, or are long shots overpriced?
 2. **Cross-venue mispricing (R2).** Gaps between Kalshi and Polymarket prices for the same event, counted only when they are executable after fees.
 3. **Internal consistency (R3).** Strike ladders, mutually exclusive outcome sets and combo (parlay) prices, with every violation classified as risk-free or not.
-4. **Market making (R4).** A logit-space Avellaneda–Stoikov quoter, backtested in a C++20 event-driven simulator with queue-position fills.
+4. **Market making (R4).** A logit-space Avellaneda–Stoikov quoter, backtested in a C++20 event-driven simulator with queue-position fills, and paper-traded on live books.
 5. **Forecasting (R5b).** Can a model beat the market's own price, out of sample?
 
 It is research and paper trading only. No orders are ever placed. Results: [RESULTS.md](RESULTS.md).
@@ -53,6 +53,8 @@ flowchart LR
 | `arbiter/fees.py`, `cpp/include/arbiter/fees.hpp` | fee models read from venue metadata (Python and C++, tested for agreement) |
 | `arbiter/research/` | calibration, matching, consistency, forecasting |
 | `arbiter/backtest.py` | events from candles/recordings into the simulator; walk-forward evaluation |
+| `arbiter/papertrade.py` | the quoter on live Polymarket WebSocket books (paper only, no orders) |
+| `arbiter/plots.py` | README charts from `results/` |
 | `cpp/` | order book, simulator, market maker, GoogleTest, Google Benchmark, pybind11 bindings |
 | `labels/` | 300 hand-labeled cross-venue pairs; manual rules reviews of every R2/R3 candidate |
 | `results/` | the measured reports behind RESULTS.md |
@@ -70,28 +72,36 @@ cmake -S . -B build && cmake --build build -j && ctest --test-dir build   # C++ 
 
 python -m arbiter.collect kalshi-series     # then kalshi-markets, polymarket-markets, tables, ...
 python -m arbiter.recorder                  # leave running; writes data/recorder/
+python -m arbiter.papertrade --minutes 60   # the quoter on live Polymarket books (paper only)
 python -m arbiter.research.calibration      # and crossvenue, consistency, marketmaking, forecast (RESULTS.md)
+python -m arbiter.plots                     # charts below, from results/
 ```
 
 ## Benchmarks and results
 
-Measured on the data described in [RESULTS.md](RESULTS.md): 1.58M markets collected, 127K with price history, and one evening (7.7 h) of live recording. Short version: prices are close to right, and no apparent edge survived fees, spreads and a reading of the rules.
+Measured on the data described in [RESULTS.md](RESULTS.md): 1.58M markets collected, 127K with price history, and about a day (22 h) of live recording. Short version: prices are close to right, and no apparent edge survived fees, spreads and a reading of the rules.
 
 | Question | Result |
 |---|---|
 | R1: are Kalshi prices calibrated? | Yes. 1-day slope **1.01** (95% CI 0.99–1.03), 40,552 snapshots / 13,889 events. Buying favorites loses **0.77¢ per contract** after fees (t = −8.2) |
 | R1: Polymarket? | Prices look too extreme (slope 0.75), concentrated in pre-game sports. Not claimed as tradable: the price history has no bid or ask, and noisy prices bias the slope the same way |
-| R2: cross-venue gaps | Biggest net gap **60¢ → 1.9¢** after reading both venues' rules: 11 of 29 positive pairs were different questions and 8 had different resolution rules |
-| R3: consistency violations | 0 profitable ladder violations. 548 of 553 cheap outcome sets were missing outcomes. The real violations had 1–10 contracts of depth |
-| R4: market making (Polymarket depth, 5.1 h, 31 markets) | **−0.82¢ per contract** at realistic queue position, matching the −0.78¢ 5-minute markout (adverse selection); still −0.38¢ at the front of the queue |
+| R2: cross-venue gaps | Biggest net gap **60¢ → 1.9¢** after reading both venues' rules: 11 of 29 positive pairs were different questions and 9 had different resolution rules |
+| R3: consistency violations | 0 profitable ladder violations. 586 of 591 cheap outcome sets were missing outcomes. The real violations had 1–10 contracts of depth |
+| R4: market making (22 h of recorded books, 210 markets) | At a realistic queue position the quoter captures **0.0¢** of spread on Polymarket (it fills only once the price has come to it) and **+1.7¢** on Kalshi, but loses 2.1¢ and 2.4¢ per contract overall, mostly to paying the spread to get flat |
 | R5: model vs market price | Brier skill **+0.47%** (CI excludes 0), 58,155 markets out of sample: real but far below a spread |
 | Matching | 0.95 precision / 0.49 recall (5-fold CV, 300 hand labels) |
 | Simulator | **21.2M events/s** replay with the market maker attached; **1.58 ns** per book update |
 
+![Calibration](docs/img/calibration.png)
+
+![Cross-venue gaps](docs/img/crossvenue.png)
+
+![Market making](docs/img/marketmaking.png)
+
 ## Design decisions & tradeoffs
 
 - **Executable gaps, never midpoint gaps.** A cross-venue or consistency "arbitrage" counts only if you could buy both legs at the quoted asks and still clear both venues' taker fees. Midpoint gaps are reported for context, but most of them vanish once you pay the spread.
-- **Every apparent arbitrage is read by a human before it is reported.** The matcher is 95% precise, but the pairs with the biggest gaps are exactly the ones most likely to be wrong: two different propositions naturally have different prices. All 29 positive pairs were checked against both venues' rules ([labels/r2_review.csv](labels/r2_review.csv)). Eleven were different questions, and eight had different resolution rules: Kalshi's Coachella "headliner" requires actually performing, while Polymarket resolves on the poster announcement.
+- **Every apparent arbitrage is read by a human before it is reported.** The matcher is 95% precise, but the pairs with the biggest gaps are exactly the ones most likely to be wrong: two different propositions naturally have different prices. All 29 positive pairs were checked against both venues' rules ([labels/r2_review.csv](labels/r2_review.csv)). Eleven were different questions, and nine had different resolution rules: Kalshi's Coachella "headliner" requires actually performing, while Polymarket resolves on the poster announcement.
 - **Fees come from venue metadata, in one model shared by Python and C++.** Kalshi charges `ceil(0.07·C·P(1−P))` with per-series multipliers and maker fees on some series, and Polymarket sets a per-market `feeSchedule`. Both are coded once per language and tested against each other, so research numbers and simulator P&L can't drift apart.
 - **Clustered statistics.** Markets in one event (11 Fed-rate outcomes, 30 strikes of one ladder) are not independent samples. Every CI is event-clustered (GLM cluster-robust SEs, clustered bootstrap), which widens intervals honestly instead of reporting 500K "independent" markets.
 - **Prices are sampled before close.** R1 reads the midpoint 1 hour, 1 day or 1 week before close, requires a two-sided book with a spread of at most 10¢ and a quote no staler than 6 hours, and never uses settlement or last-trade prices. Strategy thresholds are chosen walk-forward, on earlier months only.

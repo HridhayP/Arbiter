@@ -84,31 +84,33 @@ def crossvenue(results: str, out: str) -> str:
 
 def marketmaking(results: str, out: str) -> str:
     r = json.load(open(os.path.join(results, "marketmaking.json")))
-    venues = [(v, r[v]) for v in ("polymarket", "kalshi") if v in r] or [("polymarket", r)]
-    names = [("queue_ahead=1.0", "back of queue
-(realistic)"), ("queue_ahead=0.5", "half the level
-ahead"),
-             ("queue_ahead=0.0", "front of queue
-(optimistic)")]
-    fig, axes = plt.subplots(1, len(venues), figsize=(5.2 * len(venues), 3.9), squeeze=False)
+    venues = [(v, r[v]) for v in ("polymarket", "kalshi") if v in r]
+    names = [("queue_ahead=1.0", "back of queue\n(realistic)"), ("queue_ahead=0.5", "half the level\nahead"),
+             ("queue_ahead=0.0", "front of queue\n(optimistic)")]
+    parts = [("edge_per_contract", "spread captured at the fill", GREEN), ("drift_per_contract", "inventory drift", ORANGE),
+             ("closeout_per_contract", "paying the spread to go flat", RED), ("fees_per_contract", "fees", GREY)]
+    fig, axes = plt.subplots(1, len(venues), figsize=(5.4 * len(venues), 4.1), squeeze=False, sharey=True)
     for ax, (venue, v) in zip(axes[0], venues):
         x = np.arange(len(names))
-        pnl = [v[k]["pnl_per_contract"] * 100 for k, _ in names]
-        mk = [v[k]["markout_5m_per_contract"] * 100 for k, _ in names]
-        ax.bar(x - 0.18, pnl, 0.36, color=BLUE, label="P&L per contract (closed at the touch)")
-        ax.bar(x + 0.18, mk, 0.36, color=ORANGE, label="5-minute markout per contract")
         for i, (k, _) in enumerate(names):
-            ax.text(i - 0.18, pnl[i] / 2, f"{v[k]['fills']}
-fills", ha="center", va="center", fontsize=6.5, color="white")
+            pos = neg = 0.0
+            for key, label, color in parts:
+                val = v[k][key] * 100 * (-1 if key == "fees_per_contract" else 1)
+                base = pos if val >= 0 else neg
+                ax.bar(i, val, 0.55, bottom=base, color=color, label=label if i == 0 else None)
+                pos, neg = (pos + val, neg) if val >= 0 else (pos, neg + val)
+            net = v[k]["pnl_per_contract"] * 100
+            ax.plot([i - 0.32, i + 0.32], [net, net], color="black", lw=2, label="net P&L" if i == 0 else None)
+            ax.text(i + 0.34, net, f"{net:+.1f}¢", va="center", fontsize=7)
+            ax.text(i, 0.15 + pos, f"{v[k]['fills']} fills", ha="center", va="bottom", fontsize=6.5)
         ax.axhline(0, color="black", lw=0.6)
         ax.set_xticks(x)
         ax.set_xticklabels([n for _, n in names], fontsize=7.5)
-        n = v.get("tokens", v.get("markets"))
         book = "streamed depth" if venue == "polymarket" else "book polled every ~30 s"
-        ax.set_title(f"{venue.capitalize()}: {v['hours']:.1f} h, {n} markets, {book}", fontsize=9)
+        ax.set_title(f"{venue.capitalize()}: {v['hours']:.0f} h, {v.get('tokens', v.get('markets'))} markets, {book}", fontsize=9)
     axes[0][0].set_ylabel("cents per contract")
     axes[0][0].legend(fontsize=7, frameon=False, loc="lower left")
-    fig.suptitle("R4. Passive market making, parameters chosen walk-forward", fontsize=11)
+    fig.suptitle("R4. Where a passive market maker's P&L goes (parameters chosen walk-forward)", fontsize=11)
     fig.tight_layout()
     p = os.path.join(out, "marketmaking.png")
     fig.savefig(p)

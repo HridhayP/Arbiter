@@ -130,9 +130,20 @@ def run_block(ev: EventStream, params: dict | None, fees: FeeModel, queue_ahead:
     mids = mids if mids is not None else _mid_series(ev)
     marks = {lag: float(np.average(f.side * (np.interp(f.ts + lag * NS, mids[0], mids[1]) - f.price), weights=f.qty))
              for lag in (60, 300)}
+    # Exact P&L decomposition (dollars):
+    #   edge     = sum side*qty*(mid just before the fill - fill price)   spread captured
+    #   drift    = sum side*qty*(mid at block end - mid before the fill)   inventory P&L
+    #   closeout = pos*(exit price - mid at block end) - exit taker fee    paying the spread to go flat
+    #   pnl      = edge + drift + closeout - fill fees
+    j = np.clip(np.searchsorted(mids[0], f.ts.values, side="left") - 1, 0, len(mids[1]) - 1)
+    mid_fill, mid_end = mids[1][j], mids[1][-1]
+    q = f.side.values * f.qty.values
+    edge = float(np.sum(q * (mid_fill - f.price.values)))
+    drift = float(np.sum(q * (mid_end - mid_fill)))
+    closeout = float(pos * (exit_px - mid_end) - (fees.fee(exit_px, abs(pos), maker=False) if pos else 0.0))
     return {"pnl": pnl, "fills": len(f), "volume": float(f.qty.sum()), "fees": float(f.fee.sum()),
             "maker_share": float(f.qty[f.maker].sum() / f.qty.sum()), "max_inv": float((f.side * f.qty).cumsum().abs().max()),
-            "markout_1m": marks[60], "markout_5m": marks[300]}
+            "markout_1m": marks[60], "markout_5m": marks[300], "edge": edge, "drift": drift, "closeout": closeout}
 
 
 def slice_events(ev: EventStream, t0: int, t1: int, snaps_at: np.ndarray) -> EventStream | None:
@@ -273,6 +284,9 @@ def walk_forward(r: pd.DataFrame) -> dict:
             "markout_1m_per_contract": float(np.average(t.markout_1m.fillna(0), weights=t.volume)) if t.volume.sum() else None,
             "markout_5m_per_contract": float(np.average(t.markout_5m.fillna(0), weights=t.volume)) if t.volume.sum() else None,
             "pnl_per_contract": float(t.pnl.sum() / t.volume.sum()) if t.volume.sum() else None,
+            **({f"{k}_per_contract": float(t[k].sum() / t.volume.sum()) for k in ("edge", "drift", "closeout")}
+               if "edge" in t and t.volume.sum() else {}),
+            "fees_per_contract": float(t.fees.sum() / t.volume.sum()) if t.volume.sum() else None,
             "grid_chosen_by_block": chosen}
 
 
