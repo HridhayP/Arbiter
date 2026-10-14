@@ -81,12 +81,30 @@ def kalshi_candles(client, horizon_days: int, min_volume: float, per_series: int
         store.save_raw("kalshi", "candles", r.market_id, c)
         return r.market_id
 
+    _run_resilient(one, rows, state, workers, len(rows))
+
+
+def _run_resilient(fn, rows, state, workers, total):
+    """Map fn over rows; a failing row is logged and left out of state (so
+    the next run retries it) instead of killing the whole job."""
+    def safe(r):
+        try:
+            return fn(r)
+        except Exception as e:  # noqa: BLE001 - one bad market must not stop a multi-hour crawl
+            log.warning("skipping %s: %s", getattr(r, "market_id", r), e)
+            return None
+
+    failed = 0
     with ThreadPoolExecutor(workers) as ex:
-        for i, mid in enumerate(ex.map(one, rows)):
-            state.add(mid)
+        for i, mid in enumerate(ex.map(safe, rows)):
+            if mid is None:
+                failed += 1
+            else:
+                state.add(mid)
             if i % 2000 == 0:
-                log.info("  %d / %d", i, len(rows))
+                log.info("  %d / %d (%d failed)", i, total, failed)
     state.flush()
+    log.info("done: %d ok, %d failed (rerun to retry)", total - failed, failed)
 
 
 def polymarket_markets(client, min_volume: float) -> None:
@@ -124,12 +142,7 @@ def polymarket_prices(client, horizon_days: int, workers: int, min_volume: float
         store.save_raw("polymarket", "prices", r.market_id, h)
         return r.market_id
 
-    with ThreadPoolExecutor(workers) as ex:
-        for i, mid in enumerate(ex.map(one, rows)):
-            state.add(mid)
-            if i % 2000 == 0:
-                log.info("  %d / %d", i, len(rows))
-    state.flush()
+    _run_resilient(one, rows, state, workers, len(rows))
 
 
 def build_tables() -> None:

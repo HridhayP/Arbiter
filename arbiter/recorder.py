@@ -135,6 +135,7 @@ class Recorder:
     async def kalshi_loop(self, client: httpx.AsyncClient):
         interval = 1.0 / self.kalshi_rps
         i = 0
+        failures = 0
         while not self.stop.is_set():
             if not self.kalshi_markets:
                 await asyncio.sleep(1)
@@ -155,10 +156,14 @@ class Recorder:
                     if not (ob.get("yes_dollars") or ob.get("no_dollars")):
                         self.sink.add("kalshi", "book_snapshots", {"ts": ts, "market_id": ticker, "seq": seq,
                                                                    "side": "empty", "level": -1, "price": None, "size": None})
+                    failures = 0
                 elif r.status_code == 429:
                     await asyncio.sleep(5)
             except Exception as e:
-                log.debug("kalshi %s: %s", ticker, e)
+                failures += 1
+                if failures % 30 == 1:
+                    log.warning("kalshi polling failing (%d in a row): %s", failures, e)
+                await asyncio.sleep(min(30, failures))
             await asyncio.sleep(max(0.0, interval - (time.monotonic() - t0)))
 
     # ---- Polymarket WebSocket ----
@@ -194,13 +199,18 @@ class Recorder:
                 await asyncio.sleep(1)
                 continue
             try:
-                async with websockets.connect(PM_WS, ping_interval=None, max_size=2**24) as ws:
+                async with websockets.connect(PM_WS, ping_interval=20, ping_timeout=20, max_size=2**24) as ws:
                     self.poly_changed.clear()
                     await ws.send(json.dumps({"assets_ids": list(self.poly_tokens), "type": "market"}))
                     log.info("polymarket ws subscribed to %d tokens", len(self.poly_tokens))
                     backoff = 1
-                    last_ping = time.monotonic()
+                    last_ping = last_msg = time.monotonic()
                     while not self.stop.is_set() and not self.poly_changed.is_set():
+                        # A dead connection can raise nothing at all; with 100+
+                        # active books, a minute of silence means reconnect.
+                        if time.monotonic() - last_msg > 60:
+                            log.warning("polymarket ws silent for 60s; reconnecting")
+                            break
                         if time.monotonic() - last_ping > 10:
                             await ws.send("PING")
                             last_ping = time.monotonic()
@@ -208,6 +218,7 @@ class Recorder:
                             raw = await asyncio.wait_for(ws.recv(), timeout=5)
                         except asyncio.TimeoutError:
                             continue
+                        last_msg = time.monotonic()
                         if raw == "PONG":
                             continue
                         data = json.loads(raw)
