@@ -1,6 +1,6 @@
-# Interview notes
+# FAQ
 
-Likely questions about Arbiter, answered from the code. Every number is in [RESULTS.md](RESULTS.md).
+Common questions about Arbiter, answered from the code. Every number is in [RESULTS.md](RESULTS.md).
 
 ### 1. What is this project, in one minute?
 
