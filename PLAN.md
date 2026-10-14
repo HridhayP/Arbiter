@@ -131,7 +131,7 @@ Prices are stored as dollars in [0, 1], times are UTC, and sizes are in contract
 - [x] **M5 arbiter-sim core in C++:** book, queue fills, fees, settlement, pybind11, tests, benchmarks.
 - [x] **M6 R4 market making:** strategy and walk-forward backtest on recorded Polymarket depth. Not done: 1-minute-history backtests (candle data only shows the touch, so passive fills can't be proven) and a paper-trading mode.
 - [x] **M7 R5 forecasting model** vs market price.
-- [x] **M8 Ship:** RESULTS.md (measured numbers only), README (Mermaid diagram, quickstart, results, design decisions), INTERVIEW_NOTES.md, PR merged.
+- [x] **M8 Ship:** RESULTS.md (measured numbers only), README (Mermaid diagram, quickstart, results, design decisions), FAQ.md, PR merged.
 
 ## Rules and risks
 
