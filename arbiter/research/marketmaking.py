@@ -32,7 +32,8 @@ import pandas as pd
 
 from arbiter import _sim as S
 from arbiter import store
-from arbiter.backtest import ASK, BID, CLEAR, NS, SET, TRADE, EventStream, _cpp_fees, _mid_series, _ns, _tick
+from arbiter.backtest import (ASK, BID, CLEAR, NS, SET, TRADE, EventStream, _cpp_fees, _mid_series, _ns, _tick,
+                              events_from_kalshi_recording)
 from arbiter.fees import FeeModel
 
 # Quotes on the market's own tick (1 cent, or 0.1 cent for markets quoted below a
@@ -150,39 +151,103 @@ def slice_events(ev: EventStream, t0: int, t1: int, snaps_at: np.ndarray) -> Eve
     return sub
 
 
-def run(n_blocks: int = 6, min_trades: int = 50) -> dict:
+def evaluate(streams: list[dict], t_start: int, t_end: int, n_blocks: int) -> tuple[pd.DataFrame, dict]:
+    """streams: dicts with id, ev (EventStream), snaps_at (full-book times),
+    fees (FeeModel) and tick. Runs every grid point and queue assumption on
+    every (stream, block) and scores the walk-forward choice."""
+    edges = np.linspace(t_start, t_end, n_blocks + 1).astype(np.int64)
+    rows = []
+    for st in streams:
+        for b in range(n_blocks):
+            sub = slice_events(st["ev"], edges[b], edges[b + 1], st["snaps_at"])
+            if sub is None:
+                continue
+            mids = _mid_series(sub)
+            for qa in (1.0, 0.5, 0.0):
+                for gi, params in enumerate(GRID):
+                    rows.append({"token": st["id"], "block": b, "grid": gi, "queue_ahead": qa, "tick": st["tick"],
+                                 **run_block(sub, params | {"tick_size": st["tick"]}, st["fees"], qa, mids)})
+    r = pd.DataFrame(rows)
+    out = {f"queue_ahead={qa}": walk_forward(g) for qa, g in r.groupby("queue_ahead")} if len(r) else {}
+    return r, out
+
+
+def run_polymarket(n_blocks: int = 6, min_trades: int = 50) -> dict:
     snaps, deltas, trades = load("book_snapshots"), load("book_deltas"), load("trades")
     listing = load("listing")
     yes_tokens = set(listing.token_yes.dropna())
     fees_on = dict(zip(listing.token_yes, listing.fees_enabled))
     counts = trades[trades.token.isin(yes_tokens)].groupby("token").size()
     tokens = counts[counts >= min_trades].index.tolist()
-    t_start, t_end = _ns(trades.ts.min()), _ns(trades.ts.max())
-    edges = np.linspace(t_start, t_end, n_blocks + 1).astype(np.int64)
-    rows, checks = [], []
+    streams, checks = [], []
     for tok in tokens:
         s, d, t = snaps[snaps.token == tok], deltas[deltas.token == tok], trades[trades.token == tok]
         ev = token_events(s, d, t)
         checks.append({"token": tok, **trade_side_check(ev)})
-        snaps_at = np.array(sorted(_ns(x) for x in s.ts.unique()), dtype=np.int64)
-        fees = FeeModel("polymarket", 0.07 if fees_on.get(tok) else 0.0, 0.0, 1.0)  # worst-case taker rate
-        tick = infer_tick(s)
-        for b in range(n_blocks):
-            sub = slice_events(ev, edges[b], edges[b + 1], snaps_at)
-            if sub is None:
-                continue
-            mids = _mid_series(sub)
-            for qa in (1.0, 0.5, 0.0):
-                for gi, params in enumerate(GRID):
-                    rows.append({"token": tok, "block": b, "grid": gi, "queue_ahead": qa, "tick": tick,
-                                 **run_block(sub, params | {"tick_size": tick}, fees, qa, mids)})
-    r = pd.DataFrame(rows)
+        streams.append({"id": tok, "ev": ev, "snaps_at": np.array(sorted(_ns(x) for x in s.ts.unique()), dtype=np.int64),
+                        "fees": FeeModel("polymarket", 0.07 if fees_on.get(tok) else 0.0, 0.0, 1.0),  # worst-case taker rate
+                        "tick": infer_tick(s)})
+    t_start, t_end = _ns(trades.ts.min()), _ns(trades.ts.max())
+    r, wf = evaluate(streams, t_start, t_end, n_blocks)
     store.write_table("r4_blocks", r)
-    out = {"tokens": len(tokens), "blocks": n_blocks, "hours": (t_end - t_start) / 3.6e12,
-           "trades": int(trades.token.isin(tokens).sum()), "trade_side_check": pd.DataFrame(checks).mean(numeric_only=True).to_dict()}
-    for qa, g in r.groupby("queue_ahead"):
-        out[f"queue_ahead={qa}"] = walk_forward(g)
-    return out
+    return {"tokens": len(tokens), "blocks": n_blocks, "hours": (t_end - t_start) / 3.6e12,
+            "trades": int(trades.token.isin(tokens).sum()),
+            "trade_side_check": pd.DataFrame(checks).mean(numeric_only=True).to_dict(), **wf}
+
+
+def kalshi_trades(markets: pd.DataFrame, rps: float = 2.0) -> pd.DataFrame:
+    """Trade prints for each recorded Kalshi market over its recorded window,
+    cached in the raw store (network on first use)."""
+    from arbiter.http import RateLimitedClient
+    from arbiter.venues import kalshi as K
+
+    out = []
+    with RateLimitedClient(rates={"api.elections.kalshi.com": rps}) as c:
+        api = K.Kalshi(c)
+        for r in markets.itertuples():
+            key = f"{r.market_id}_{int(r.t0.timestamp())}_{int(r.t1.timestamp())}"
+            raw = store.load_raw("kalshi", "trades", key)
+            if raw is None:
+                raw = api.trades(r.market_id, min_ts=int(r.t0.timestamp()), max_ts=int(r.t1.timestamp()) + 1)
+                store.save_raw("kalshi", "trades", key, raw)
+            out += K.trade_rows(raw)
+    return pd.DataFrame(out)
+
+
+def run_kalshi(n_blocks: int = 6, min_trades: int = 20) -> dict:
+    """Kalshi: the recorder polls each watched market's full book over REST
+    (about every 30 s) and trade prints come from the public trades endpoint.
+    The book between polls is unknown, so queue positions are coarser than on
+    Polymarket's streamed deltas. Fees are each series' own (some Kalshi
+    series charge makers too)."""
+    from arbiter.fees import kalshi_fees
+
+    book = load("book_snapshots", "kalshi")
+    win = book.groupby("market_id").ts.agg(t0="min", t1="max").reset_index()
+    trades = kalshi_trades(win)
+    counts = trades.groupby("market_id").size()
+    ids = counts[counts >= min_trades].index.tolist()
+    meta = {x["ticker"]: x for x in (store.load_raw("kalshi", "series", "all") or [])}
+    streams, checks = [], []
+    for mid in ids:
+        b, t = book[book.market_id == mid], trades[trades.market_id == mid]
+        ev = events_from_kalshi_recording(b, t)
+        checks.append({"token": mid, **trade_side_check(ev)})
+        sm = meta.get(mid.split("-")[0], {})
+        prices = pd.DataFrame({"price": np.concatenate([b.price.values, 1 - b.price.values])})
+        streams.append({"id": mid, "ev": ev, "snaps_at": np.array(sorted(_ns(x) for x in b.ts.unique()), dtype=np.int64),
+                        "fees": kalshi_fees(sm.get("fee_type"), sm.get("fee_multiplier")), "tick": infer_tick(prices),
+                        "maker_fees": "maker" in str(sm.get("fee_type"))})
+    t_start, t_end = _ns(book.ts.min()), _ns(book.ts.max())
+    r, wf = evaluate(streams, t_start, t_end, n_blocks)
+    store.write_table("r4_kalshi_blocks", r)
+    return {"markets": len(ids), "markets_recorded": int(win.shape[0]), "markets_with_maker_fees": int(sum(s["maker_fees"] for s in streams)),
+            "blocks": n_blocks, "hours": (t_end - t_start) / 3.6e12, "trades": int(trades.market_id.isin(ids).sum()),
+            "trade_side_check": pd.DataFrame(checks).mean(numeric_only=True).to_dict(), **wf}
+
+
+def run() -> dict:
+    return {"polymarket": run_polymarket(), "kalshi": run_kalshi()}
 
 
 def walk_forward(r: pd.DataFrame) -> dict:

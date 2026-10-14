@@ -84,23 +84,31 @@ def crossvenue(results: str, out: str) -> str:
 
 def marketmaking(results: str, out: str) -> str:
     r = json.load(open(os.path.join(results, "marketmaking.json")))
-    rows = [("back of queue\n(realistic)", r["queue_ahead=1.0"]), ("half the level\nahead", r["queue_ahead=0.5"]),
-            ("front of queue\n(optimistic)", r["queue_ahead=0.0"])]
-    x = np.arange(len(rows))
-    pnl = [v["pnl_per_contract"] * 100 for _, v in rows]
-    mk = [v["markout_5m_per_contract"] * 100 for _, v in rows]
-    fig, ax = plt.subplots(figsize=(6.5, 3.6))
-    ax.bar(x - 0.18, pnl, 0.36, color=BLUE, label="P&L per contract (inventory closed at the touch)")
-    ax.bar(x + 0.18, mk, 0.36, color=ORANGE, label="5-minute markout per contract (adverse selection)")
-    for i, (_, v) in enumerate(rows):
-        ax.text(i, min(pnl[i], mk[i]) - 0.08, f"{v['fills']} fills", ha="center", va="top", fontsize=7)
-    ax.axhline(0, color="black", lw=0.6)
-    ax.set_xticks(x)
-    ax.set_xticklabels([n for n, _ in rows], fontsize=8)
-    ax.set_ylabel("cents per contract")
-    ax.set_ylim(min(pnl + mk) - 0.35, 0.15)
-    ax.set_title(f"R4. Market making on {r['hours']:.1f} h of recorded Polymarket depth ({r['tokens']} markets)", fontsize=10)
-    ax.legend(fontsize=7, frameon=False, loc="lower left")
+    venues = [(v, r[v]) for v in ("polymarket", "kalshi") if v in r] or [("polymarket", r)]
+    names = [("queue_ahead=1.0", "back of queue
+(realistic)"), ("queue_ahead=0.5", "half the level
+ahead"),
+             ("queue_ahead=0.0", "front of queue
+(optimistic)")]
+    fig, axes = plt.subplots(1, len(venues), figsize=(5.2 * len(venues), 3.9), squeeze=False)
+    for ax, (venue, v) in zip(axes[0], venues):
+        x = np.arange(len(names))
+        pnl = [v[k]["pnl_per_contract"] * 100 for k, _ in names]
+        mk = [v[k]["markout_5m_per_contract"] * 100 for k, _ in names]
+        ax.bar(x - 0.18, pnl, 0.36, color=BLUE, label="P&L per contract (closed at the touch)")
+        ax.bar(x + 0.18, mk, 0.36, color=ORANGE, label="5-minute markout per contract")
+        for i, (k, _) in enumerate(names):
+            ax.text(i - 0.18, pnl[i] / 2, f"{v[k]['fills']}
+fills", ha="center", va="center", fontsize=6.5, color="white")
+        ax.axhline(0, color="black", lw=0.6)
+        ax.set_xticks(x)
+        ax.set_xticklabels([n for _, n in names], fontsize=7.5)
+        n = v.get("tokens", v.get("markets"))
+        book = "streamed depth" if venue == "polymarket" else "book polled every ~30 s"
+        ax.set_title(f"{venue.capitalize()}: {v['hours']:.1f} h, {n} markets, {book}", fontsize=9)
+    axes[0][0].set_ylabel("cents per contract")
+    axes[0][0].legend(fontsize=7, frameon=False, loc="lower left")
+    fig.suptitle("R4. Passive market making, parameters chosen walk-forward", fontsize=11)
     fig.tight_layout()
     p = os.path.join(out, "marketmaking.png")
     fig.savefig(p)
