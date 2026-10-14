@@ -18,18 +18,21 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from arbiter.research.calibration import logit
+from arbiter.research.calibration import logit, scheduled_close
 from arbiter.timeutil import utc_us
 
 EPS = 1e-4
 
 
 def features(markets: pd.DataFrame, candles: pd.DataFrame, horizon=pd.Timedelta(days=1)) -> pd.DataFrame:
-    """One row per resolved market with candles before close - horizon."""
+    """One row per resolved market, sampled `horizon` before its scheduled
+    deadline and only if it was still open then (see calibration.snapshots:
+    sampling before the actual close leaks the outcome)."""
     m = markets[markets.result.isin(["yes", "no"]) & markets.close_time.notna()].copy()
     m["close_time"] = utc_us(m.close_time)
     m["open_time"] = utc_us(m.open_time)
-    m["t"] = m.close_time - horizon
+    m["t"] = utc_us(scheduled_close(m) - horizon)
+    m = m[m.t < m.close_time]
     c = candles.copy()
     c["ts"] = utc_us(c.ts)
     c["mid"] = np.where(c.yes_bid.notna() & c.yes_ask.notna(), (c.yes_bid + c.yes_ask) / 2, c["last"])
@@ -130,3 +133,16 @@ def evaluate(f: pd.DataFrame, n_folds: int = 5, min_cat: int = 200, seed: int = 
         res[name]["ci95"] = [float(np.percentile(boots, 2.5)), float(np.percentile(boots, 97.5))]
         res[name]["brier_skill_vs_market"] = float(1 - res[name]["brier"] / res["market"]["brier"])
     return {"summary": res, "scored": scored}
+
+
+if __name__ == "__main__":
+    import json
+
+    from arbiter import store
+
+    f = features(store.read_table("markets"), store.read_table("candles"))
+    out = evaluate(f)
+    store.write_table("r5_forecast_scored", out["scored"])
+    with open(store.path("reports", "forecast.json"), "w") as fh:
+        json.dump(out["summary"], fh, indent=2)
+    print(json.dumps(out["summary"], indent=2))
