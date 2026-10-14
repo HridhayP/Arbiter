@@ -14,4 +14,4 @@ import pandas as pd
 
 def utc_us(s: pd.Series) -> pd.Series:
     """Timezone-aware UTC datetimes at microsecond resolution."""
-    return pd.to_datetime(s, utc=True).dt.as_unit("us")
+    return pd.to_datetime(s, utc=True, format="ISO8601").dt.as_unit("us")

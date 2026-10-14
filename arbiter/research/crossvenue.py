@@ -44,8 +44,8 @@ def latest_rows(listing: pd.DataFrame) -> pd.DataFrame:
 def match_listing(k: pd.DataFrame, p: pd.DataFrame, labels_path: str = "labels/match_labels.csv",
                   threshold: float = 0.7) -> pd.DataFrame:
     """Runs the matcher on the markets in the listing snapshots."""
-    kk = latest_rows(k[k.legs.isna()]).assign(close_time=lambda d: pd.to_datetime(d.close_time, utc=True))
-    pp = latest_rows(p).assign(close_time=lambda d: pd.to_datetime(d.close_time, utc=True))
+    kk = latest_rows(k[k.legs.isna()]).assign(close_time=lambda d: pd.to_datetime(d.close_time, utc=True, format="ISO8601"))
+    pp = latest_rows(p).assign(close_time=lambda d: pd.to_datetime(d.close_time, utc=True, format="ISO8601"))
     kk = kk[kk.close_time.notna()]
     pp = pp[pp.close_time.notna()]
     cand = M.add_features(M.candidates(kk, pp))
