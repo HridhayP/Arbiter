@@ -1,0 +1,37 @@
+{
+  "kalshi_snapshots": 6,
+  "polymarket_snapshots": 23,
+  "ladder": {
+    "violations": 48,
+    "net_positive": 0,
+    "events": 16,
+    "median_gross_cents": 1.0000000000000009
+  },
+  "kalshi_exclusive": {
+    "group_snapshots": 31216,
+    "groups": 5378,
+    "sell_all_net_positive": 1,
+    "buy_all_net_positive_if_exhaustive": 513,
+    "median_sum_bids": 0.9099999999999999,
+    "median_sum_asks": 1.09
+  },
+  "combos": {
+    "priced": 2,
+    "median_ask_over_indep": 1.0245394152074168,
+    "median_ask_minus_indep_cents": 1.052499999999998,
+    "share_ask_below_indep": 0.0,
+    "by_legs": {
+      "2": 1.0245394152074168
+    }
+  },
+  "polymarket_negrisk": {
+    "group_snapshots": 66073,
+    "groups": 3010,
+    "sell_all_net_positive": 31,
+    "buy_all_net_positive_if_exhaustive": 9282,
+    "median_sum_bids": 0.906,
+    "median_sum_asks": 1.047,
+    "buy_all_candidates_complete_sets": 5,
+    "buy_all_candidates_missing_outcomes": 548
+  }
+}

@@ -21,3 +21,10 @@ KXSATOSHIBTCYEAR-27,Will Satoshi move any Bitcoin in 2026?,likely_equivalent,by 
 KXNYSECIRCUIT-27,NYSE marketwide circuit breaker before 2027?,likely_equivalent,rules not compared
 KXALBUMRELEASE-26-EMI,Will Eminem release an album in 2026?,likely_equivalent,"""new album"" vs ""an album""; rules not compared"
 KXRECOGPERSONIRAN-26,US recognizes Reza Pahlavi as leader of Iran in 2026?,likely_equivalent,rules not compared
+KXTOUR-27-SAB,Will Sabrina Carpenter release an album in 2026?,false_match,tour vs album
+KXTOUR-27-JUS,Will Justin Bieber release an album in 2026?,false_match,tour vs album
+KXLIKUDCOUNT-26OCT27-A29,Will Likud win 35 or more seats in the 2026 Israeli legislative election?,false_match,above 29 vs 35 or more (matcher missed the number conflict)
+KXROLEATEVENTCOACHELLA-27DEC31-SAB,Will Sabrina Carpenter headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXROLEATEVENTCOACHELLA-27DEC31-DRA,Will Drake headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXLEAVEOPEC-27,Will another country leave OPEC in 2026?,likely_equivalent,same question; rules not compared; best net 0.37c
+KXROLEINPRODUCTIONDOOMSDAY-HUG,Hugh Jackman as Wolverine?,likely_equivalent,rules not compared; best net 0.03c

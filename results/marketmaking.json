@@ -1,0 +1,76 @@
+{
+  "tokens": 31,
+  "blocks": 6,
+  "hours": 5.123655372777778,
+  "trades": 24406,
+  "trade_side_check": {
+    "trades": 787.2903225806451,
+    "taker_buy_at_or_above_ask": 0.8464099475023046,
+    "taker_buy_at_or_below_bid": 0.053303074868820986,
+    "taker_sell_at_or_below_bid": 0.8433042112348277,
+    "taker_sell_at_or_above_ask": 0.030246159134809013
+  },
+  "queue_ahead=0.0": {
+    "token_blocks": 122,
+    "total_pnl": -12.205794782000034,
+    "pnl_per_block_mean": -2.4411589564000074,
+    "pnl_per_block_t": -5.614835493884934,
+    "tokens_positive_share": 0.3548387096774194,
+    "fills": 370,
+    "volume": 3196.3771979999997,
+    "fees": 0.0,
+    "maker_share": 1.0,
+    "markout_1m_per_contract": -0.00482724467681833,
+    "markout_5m_per_contract": -0.004612712245297528,
+    "pnl_per_contract": -0.003818634042827393,
+    "grid_chosen_by_block": {
+      "1": 1,
+      "2": 7,
+      "3": 7,
+      "4": 7,
+      "5": 1
+    }
+  },
+  "queue_ahead=0.5": {
+    "token_blocks": 122,
+    "total_pnl": -14.840894480519493,
+    "pnl_per_block_mean": -2.968178896103899,
+    "pnl_per_block_t": -4.80062869671051,
+    "tokens_positive_share": 0.22580645161290322,
+    "fills": 206,
+    "volume": 1893.1576766173164,
+    "fees": 0.0,
+    "maker_share": 1.0,
+    "markout_1m_per_contract": -0.006910363030322467,
+    "markout_5m_per_contract": -0.007683060871083429,
+    "pnl_per_contract": -0.007839227901522245,
+    "grid_chosen_by_block": {
+      "1": 0,
+      "2": 6,
+      "3": 6,
+      "4": 7,
+      "5": 7
+    }
+  },
+  "queue_ahead=1.0": {
+    "token_blocks": 122,
+    "total_pnl": -15.360886643721607,
+    "pnl_per_block_mean": -3.0721773287443215,
+    "pnl_per_block_t": -5.09906601998798,
+    "tokens_positive_share": 0.1935483870967742,
+    "fills": 204,
+    "volume": 1871.42541539072,
+    "fees": 0.0,
+    "maker_share": 1.0,
+    "markout_1m_per_contract": -0.007187700563597466,
+    "markout_5m_per_contract": -0.007783873734718676,
+    "pnl_per_contract": -0.008208121209316016,
+    "grid_chosen_by_block": {
+      "1": 0,
+      "2": 6,
+      "3": 6,
+      "4": 7,
+      "5": 7
+    }
+  }
+}

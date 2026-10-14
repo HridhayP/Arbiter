@@ -123,15 +123,15 @@ Prices are stored as dollars in [0, 1], times are UTC, and sizes are in contract
 
 ## Milestones
 
-- [ ] **M0 Setup:** repo, Python env (`uv`), C++ toolchain check in WSL (g++-12, CMake, gtest, benchmark, pybind11), CI for both. Confirm each venue's fee schedule and rate limits from its docs.
-- [ ] **M1 Data:** historical collectors to Parquet/DuckDB, with resumable pagination and rate limiting. Start the live recorder as early as possible, since its value grows with time running. Data-quality report (coverage, gaps).
-- [ ] **M2 R1 calibration study**, written up with plots.
-- [ ] **M3 R5 matching + R2 cross-venue mispricing.**
-- [ ] **M4 R3 combinatorial consistency** (exclusive sets, ladders, combos).
-- [ ] **M5 arbiter-sim core in C++:** book, queue fills, fees, settlement, pybind11, tests, benchmarks.
-- [ ] **M6 R4 market making:** strategy, walk-forward backtests on 1-minute history and then on recorded depth, plus a paper-trading mode.
-- [ ] **M7 R5 forecasting model** vs market price.
-- [ ] **M8 Ship:** RESULTS.md (measured numbers only), README (Mermaid diagram, quickstart, results, design decisions), INTERVIEW_NOTES.md, PR merged.
+- [x] **M0 Setup:** repo, Python env (`uv`), C++ toolchain check in WSL (g++-12, CMake, gtest, benchmark, pybind11), CI for both. Confirm each venue's fee schedule and rate limits from its docs.
+- [x] **M1 Data:** historical collectors to Parquet/DuckDB, with resumable pagination and rate limiting. Start the live recorder as early as possible, since its value grows with time running. Data-quality report (coverage, gaps).
+- [x] **M2 R1 calibration study**, written up (reliability tables in `results/calibration.json`; no plot images).
+- [x] **M3 R5 matching + R2 cross-venue mispricing.**
+- [x] **M4 R3 combinatorial consistency** (exclusive sets, ladders, combos; only 2 combos had resting quotes).
+- [x] **M5 arbiter-sim core in C++:** book, queue fills, fees, settlement, pybind11, tests, benchmarks.
+- [x] **M6 R4 market making:** strategy and walk-forward backtest on recorded Polymarket depth. Not done: 1-minute-history backtests (candle data only shows the touch, so passive fills can't be proven) and a paper-trading mode.
+- [x] **M7 R5 forecasting model** vs market price.
+- [x] **M8 Ship:** RESULTS.md (measured numbers only), README (Mermaid diagram, quickstart, results, design decisions), INTERVIEW_NOTES.md, PR merged.
 
 ## Rules and risks
 

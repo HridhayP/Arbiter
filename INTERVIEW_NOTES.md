@@ -1,6 +1,6 @@
 # Interview notes
 
-Ten likely questions about Arbiter, answered from the code. Every number is in [RESULTS.md](RESULTS.md).
+Likely questions about Arbiter, answered from the code. Every number is in [RESULTS.md](RESULTS.md).
 
 ### 1. What is this project, in one minute?
 
@@ -17,6 +17,10 @@ The headline is mostly "no tradable edge after fees and spread". The interesting
 ### 2. What is the favorite–longshot bias, and how did you measure it?
 
 In betting markets, longshots tend to be overpriced and favorites underpriced. Arbiter regresses the outcome on logit(price) with a logistic GLM. A slope above 1 means realized odds are more extreme than prices (the classic bias), and below 1 means the reverse. Standard errors are clustered by event, because the 11 outcomes of one Fed meeting aren't independent data points. Reliability tables use a clustered bootstrap, and prices are bid/ask midpoints with a spread of at most 10¢, sampled at fixed horizons before the deadline. A favorite-buying strategy is then tested walk-forward, paying the ask and fees, with the threshold chosen on earlier months only.
+
+**Results.**
+- **Kalshi** is well calibrated. The 1-day slope is 1.01 (95% CI 0.99–1.03) over 40,552 market snapshots in 13,889 events. Buying favorites loses 0.77¢ per contract after fees (event-clustered t = −8.2): the small edge left in favorites is smaller than the ask plus fees.
+- **Polymarket** prices look too extreme: slope 0.75, with 7¢ contracts winning 15%. But the gap sits in sports markets sampled before kickoff, and Polymarket's history has only hourly prices with no bid or ask. Random error in a price variable pulls a regression slope below 1 even when the true price is calibrated (errors-in-variables). So this isn't claimed as a tradable bias.
 
 ### 3. What was the biggest mistake you caught?
 
@@ -54,7 +58,7 @@ Every apparent violation turned out to have a mundane cause:
 
 ### 7. How does the C++ simulator work?
 
-The book holds prices on a 0.001 grid, 1,001 levels per side, stored in a flat array, so a level update is an array write (2 ns). Events are book updates, trades and clears; the simulator replays about 16M events/s with the market maker attached.
+The book holds prices on a 0.001 grid, 1,001 levels per side, stored in a flat array, so a level update is an array write (about 1.6 ns). Events are book updates, trades and clears; the simulator replays about 21M events/s with the market maker attached.
 - **Resting orders:** each one records the volume ahead of it at its price. Trades at that price use up the volume ahead first, then fill us. Cancels are assumed to come proportionally from ahead of us and behind us. A trade *through* our price fills us first (price priority).
 - **Crossing orders:** immediate-or-cancel against displayed size, and they can't retake liquidity already consumed.
 - **Fees:** both venues' formulas, shared with Python and tested for agreement.
@@ -68,7 +72,13 @@ A binary contract lives in (0, 1), and its price volatility shrinks near the bou
 
 No. On about 5 hours of recorded Polymarket depth (31 markets with at least 50 trades), parameters were chosen walk-forward on earlier time blocks, and inventory was closed at the touch at the end of each block. At realistic queue position (back of the queue) it lost $15.36 over 1,871 contracts, 0.82¢ per contract. The 5-minute markout was −0.78¢ per contract, so nearly all of the loss is adverse selection: the quoter gets filled just before the price moves against it. Assuming the front of the queue, fills nearly double but the result is still −0.38¢ per contract. Two checks back this up. The trade prints match the reconstructed book: on average 85% of taker buys print at or above the ask, and only 5% at or below the bid, the rest being timing noise between the two feeds. And a unit test shows that marking leftover inventory at the mid, instead of the touch, would have flattered the result.
 
-### 10. What would you do with more time?
+### 10. Can a model beat the market's price?
+
+Barely, and not in a way you can trade. Features are the price 1 day before the deadline, its moves over the previous 6 hours, 1 day and 3 days, the spread, the market's age, category and venue, plus interactions that let the price's weight differ by category and venue. A logistic model and a gradient-boosted model are trained on earlier markets and scored on later ones (time-ordered folds).
+
+On 58,155 scored markets, gradient boosting improves the Brier score by 0.0007 over the price alone, a 0.5% skill gain. The event-clustered 95% CI (−0.0011 to −0.0003) excludes zero. Most of the gain is recalibration: learning how much to shrink a venue's or category's prices. That's worth far less than a 1–2¢ spread plus fees, so the honest answer is that the price already contains almost everything public features can add.
+
+### 11. What would you do with more time?
 
 - **Record for weeks, not hours.** The market-making sample is small (5 traded blocks), and cross-venue persistence needs many more snapshots.
 - **Add Kalshi trade prints to its book polls,** to run R4 on the second venue with its maker fees.
