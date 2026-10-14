@@ -14,7 +14,10 @@ classified by whether profiting from it needs any assumption:
      n - sum(bids). Model-free.
    - sum of YES asks < 1: buy every outcome; only riskless if the set is
      also exhaustive (exactly one resolves YES), which the venues don't
-     flag, so these are reported separately as conditional.
+     flag. Most such sets are not: the listing is missing outcomes (a
+     third-party candidate, "draw"), so verify_polymarket_buy_all() fetches
+     each candidate's event and keeps only sets whose every market was
+     quoted; the survivors' rules are then read by hand (labels/r3_review.csv).
 3. Combos (Kalshi multivariate markets): a combo pays only if every leg
    resolves as specified. Its price is compared with the product of its
    legs' prices (independence) to measure the combo premium; correlated
@@ -35,6 +38,7 @@ from arbiter import store
 from arbiter.fees import FeeModel, kalshi_fees
 
 KALSHI_TAKER = kalshi_fees("quadratic", 1.0)
+POLY_WORST_RATE = 0.07  # listing has no category: charge the highest published taker rate
 
 
 def load_listing(venue: str) -> pd.DataFrame:
@@ -119,8 +123,6 @@ def exclusive_sets(listing: pd.DataFrame, group_col: str, fee_fn) -> pd.DataFram
         if len(g) < 2:
             continue
         quoted = g[_valid(g)]
-        if len(quoted) < len(g):
-            sum_bids_complete = np.nan  # an unquoted outcome: no executable sell-all
         rows.append({
             "ts": ts, "group": gid, "n": len(g), "n_quoted": len(quoted),
             "sum_bids": float(g.yes_bid.fillna(0).sum()), "sum_asks": float(g.yes_ask.fillna(1).sum()),
@@ -168,7 +170,7 @@ def combo_premium(k: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def run() -> dict:
+def run(verify: bool = False) -> dict:
     k = load_listing("kalshi")
     p = load_listing("polymarket")
     res: dict = {"kalshi_snapshots": int(k.ts.nunique()) if len(k) else 0,
@@ -194,12 +196,41 @@ def run() -> dict:
                              "share_ask_below_indep": float((combo.ask_minus_indep < 0).mean()),
                              "by_legs": combo.groupby("legs").ask_over_indep.median().to_dict()}
     if len(p):
-        pfee = lambda r, price: (0.05 * price * (1 - price)) if getattr(r, "fees_enabled", False) else 0.0  # noqa: E731
+        pfee = lambda r, price: (POLY_WORST_RATE * price * (1 - price)) if getattr(r, "fees_enabled", False) else 0.0  # noqa: E731
         sets = exclusive_sets(p, "neg_risk_id", pfee)
         if len(sets):
             store.write_table("r3_polymarket_negrisk", sets)
             res["polymarket_negrisk"] = _summ(sets)
+            if verify:
+                v = verify_polymarket_buy_all(sets, p)
+                if len(v):
+                    store.write_table("r3_polymarket_buy_all_verified", v)
+                    res["polymarket_negrisk"]["buy_all_candidates_complete_sets"] = int(v.complete.sum())
+                    res["polymarket_negrisk"]["buy_all_candidates_missing_outcomes"] = int((~v.complete).sum())
     return res
+
+
+def verify_polymarket_buy_all(sets: pd.DataFrame, listing: pd.DataFrame) -> pd.DataFrame:
+    """For neg-risk groups whose asks sum below 1 (after fees): does the
+    listing hold every market of the group's event? Network: one gamma call
+    per group."""
+    from arbiter.http import RateLimitedClient
+    from arbiter.venues.polymarket import GAMMA
+
+    pos = sets[sets.buy_all_net_if_exhaustive > 0]
+    event_of = listing.drop_duplicates("neg_risk_id").set_index("neg_risk_id").event_id
+    rows = []
+    with RateLimitedClient() as c:
+        for gid, d in pos.groupby("group"):
+            e = c.get_json(f"{GAMMA}/events/{event_of.get(gid)}") or {}
+            ms = e.get("markets") or []
+            rows.append({"group": gid, "event_id": event_of.get(gid), "title": e.get("title"),
+                         "n_listing": int(d.n.max()), "n_event": len(ms),
+                         "snapshots_positive": int(len(d)), "best_net": float(d.buy_all_net_if_exhaustive.max())})
+    r = pd.DataFrame(rows)
+    if len(r):
+        r["complete"] = r.n_listing >= r.n_event
+    return r
 
 
 def _summ(s: pd.DataFrame) -> dict:
@@ -210,7 +241,9 @@ def _summ(s: pd.DataFrame) -> dict:
 
 
 if __name__ == "__main__":
-    r = run()
+    import sys
+
+    r = run(verify="--verify" in sys.argv)
     with open(store.path("reports", "consistency.json"), "w") as f:
         json.dump(r, f, indent=2, default=str)
     print(json.dumps(r, indent=2, default=str))
