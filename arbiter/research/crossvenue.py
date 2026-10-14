@@ -156,6 +156,13 @@ def run(review_path: str = "labels/r2_review.csv") -> dict:
         pers = persistence(g)
         if len(pers):
             store.write_table("r2_persistence", pers)
+        # one row per pair, with the review verdict, for the report and its chart
+        per = (g.groupby(["kalshi_id", "poly_id", "kalshi_text", "poly_text"])
+               .agg(snapshots=("ts_k", "size"), max_net=("net_best", "max"), mean_abs_mid_gap=("mid_gap", lambda x: x.abs().mean()))
+               .reset_index().merge(review[["kalshi_id", "poly_text", "verdict"]], on=["kalshi_id", "poly_text"], how="left"))
+        default = pd.Series(np.where(per.max_net > 0, "unreviewed", "not_reviewed_never_positive"), index=per.index)
+        per["verdict"] = per.verdict.fillna(default)
+        per.to_csv(store.path("reports", "r2_pairs.csv"), index=False)
     return res
 
 

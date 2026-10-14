@@ -217,6 +217,8 @@ def run(markets: pd.DataFrame, candles: pd.DataFrame) -> dict:
     for (venue, horizon), g in naive.groupby(["venue", "horizon"]):
         if len(g) >= 200:
             out.setdefault("anchored_on_actual_close", {})[f"{venue}/{horizon}"] = fit(g).as_dict()
+            if horizon == "1d":
+                out.setdefault("reliability_anchored_on_actual_close", {})[venue] = reliability(g).to_dict("records")
     for h in HORIZONS:
         r = favorite_strategy(s, h)
         if r:

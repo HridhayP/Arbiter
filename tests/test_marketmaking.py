@@ -36,3 +36,32 @@ def test_block_closes_out_at_the_touch_not_the_mid():
     assert r["fills"] >= 1 and r["max_inv"] > 0
     # bought near 0.49, closed at the 0.40 bid: a loss, where marking at the 0.50 mid would show a gain
     assert r["pnl"] < 0
+
+
+def test_paper_trader_turns_live_messages_into_events():
+    from arbiter import papertrade as P
+
+    book = P.to_rows({"event_type": "book", "asset_id": "t", "bids": [{"price": "0.45", "size": "100"}],
+                      "asks": [{"price": "0.47", "size": "50"}]})
+    assert [r[1:] for r in book] == [(P.CLEAR, 0, 0, 0.0), (P.SET, P.BID, 450, 100.0), (P.SET, P.ASK, 470, 50.0)]
+    ch = P.to_rows({"event_type": "price_change", "price_changes": [{"asset_id": "t", "side": "SELL", "price": "0.47", "size": "0"}]})
+    assert [r[1:] for r in ch] == [(P.SET, P.ASK, 470, 0.0)]
+    tr = P.to_rows({"event_type": "last_trade_price", "asset_id": "t", "side": "BUY", "price": "0.47", "size": "5"})
+    assert [r[1:] for r in tr] == [(P.TRADE, P.ASK, 470, 5.0)]
+    # a book fed message by message keeps state across calls
+    b = P.Book({"token": "t", "question": "q", "fees_enabled": False, "tick": 10}, R.GRID[0], 1.0)
+    b.feed(book)
+    assert b.sim.book.best_bid == 450 and b.sim.book.best_ask == 470
+    b.feed(ch)
+    assert b.sim.book.best_ask > 470
+
+
+def test_pnl_decomposition_adds_up():
+    rows = [(1, SET, BID, 400, 100.0), (1, SET, ASK, 600, 100.0)]
+    rows += [(2 + i, SET, BID, 400, 100.0) for i in range(3)]
+    rows += [(10, TRADE, BID, 410, 1000.0), (11, SET, BID, 380, 100.0), (12, SET, ASK, 560, 100.0)]
+    ev = EventStream.build(rows)
+    params = R.GRID[0] | {"k": 1e6, "gamma": 0.01, "tick_size": 10, "min_spread_ticks": 1}
+    r = R.run_block(ev, params, FeeModel("polymarket", 0.07, 0.0, 1.0), queue_ahead=1.0)
+    assert r["fills"] >= 1
+    assert r["pnl"] == pytest.approx(r["edge"] + r["drift"] + r["closeout"] - r["fees"])

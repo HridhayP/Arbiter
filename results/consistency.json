@@ -1,37 +1,37 @@
 {
-  "kalshi_snapshots": 6,
-  "polymarket_snapshots": 23,
+  "kalshi_snapshots": 13,
+  "polymarket_snapshots": 29,
   "ladder": {
-    "violations": 48,
+    "violations": 107,
     "net_positive": 0,
-    "events": 16,
+    "events": 18,
     "median_gross_cents": 1.0000000000000009
   },
   "kalshi_exclusive": {
-    "group_snapshots": 31216,
+    "group_snapshots": 66555,
     "groups": 5378,
     "sell_all_net_positive": 1,
-    "buy_all_net_positive_if_exhaustive": 513,
-    "median_sum_bids": 0.9099999999999999,
+    "buy_all_net_positive_if_exhaustive": 1120,
+    "median_sum_bids": 0.91,
     "median_sum_asks": 1.09
   },
   "combos": {
-    "priced": 2,
-    "median_ask_over_indep": 1.0245394152074168,
-    "median_ask_minus_indep_cents": 1.052499999999998,
+    "priced": 7,
+    "median_ask_over_indep": 1.0367863186960007,
+    "median_ask_minus_indep_cents": 1.1324999999999974,
     "share_ask_below_indep": 0.0,
     "by_legs": {
-      "2": 1.0245394152074168
+      "2": 1.0367863186960007
     }
   },
   "polymarket_negrisk": {
-    "group_snapshots": 66073,
-    "groups": 3010,
-    "sell_all_net_positive": 31,
-    "buy_all_net_positive_if_exhaustive": 9282,
-    "median_sum_bids": 0.906,
+    "group_snapshots": 83378,
+    "groups": 3043,
+    "sell_all_net_positive": 38,
+    "buy_all_net_positive_if_exhaustive": 11777,
+    "median_sum_bids": 0.905,
     "median_sum_asks": 1.047,
     "buy_all_candidates_complete_sets": 5,
-    "buy_all_candidates_missing_outcomes": 548
+    "buy_all_candidates_missing_outcomes": 586
   }
 }
