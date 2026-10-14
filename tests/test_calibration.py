@@ -68,3 +68,43 @@ def test_favorite_strategy_finds_planted_edge_and_not_a_fake_one():
     m, c = synthetic(n_events=3000, bias=1.0, seed=4)
     r = C.favorite_strategy(C.snapshots(m, c), "1d")
     assert r["event_clustered_t"] < 2  # calibrated prices: spread + fees leave no edge
+
+
+def by_date_markets(n=1500, days=30, seed=3):
+    """'Will it happen by the deadline?' markets with perfectly calibrated
+    prices: the event arrives at rate lam per day, the price at time t is
+    P(arrival before the deadline | none yet) = 1 - exp(-lam * time left),
+    and a market closes the moment the event happens (YES) or at the
+    deadline (NO), like Polymarket's closedTime and Kalshi's early close."""
+    rng = np.random.default_rng(seed)
+    t0 = pd.Timestamp("2025-01-01", tz="UTC")
+    rows, candles = [], []
+    for i in range(n):
+        lam = rng.uniform(0.002, 0.15)
+        open_ = t0 + pd.Timedelta(days=int(rng.integers(0, 300)))
+        deadline = open_ + pd.Timedelta(days=days)
+        tau = open_ + pd.Timedelta(days=float(rng.exponential(1 / lam)))
+        yes = tau < deadline
+        close = tau.floor("h") if yes else deadline
+        rows.append({"venue": "polymarket", "market_id": f"M{i}", "event_id": f"E{i}", "series_id": "S", "category": "T",
+                     "volume": 1.0, "result": "yes" if yes else "no", "close_time": close, "scheduled_close": deadline,
+                     "open_time": open_, "fee_type": "free", "fee_multiplier": 0.0})
+        for h in range(1, 24 * 8 + 1):
+            ts = close - pd.Timedelta(hours=h)
+            if ts < open_:
+                break
+            left = (deadline - ts).total_seconds() / 86400
+            p = 1 - np.exp(-lam * left)
+            candles.append({"venue": "polymarket", "market_id": f"M{i}", "ts": ts, "yes_bid": np.nan, "yes_ask": np.nan, "last": p})
+    return pd.DataFrame(rows), pd.DataFrame(candles)
+
+
+def test_anchoring_on_the_actual_close_fakes_a_longshot_bias():
+    m, c = by_date_markets(n=4000)
+    honest = C.snapshots(m, c, anchor="scheduled").query("horizon == '1d'")
+    naive = C.snapshots(m, c, anchor="close").query("horizon == '1d'")
+    # calibrated prices: the win rate matches the average price (4 SE band)
+    se = np.sqrt(honest.price.mean() / len(honest))
+    assert abs(honest.y.mean() - honest.price.mean()) < 4 * se, (honest.y.mean(), honest.price.mean())
+    # YES markets get sampled a day before the surprise: cheap, and they win
+    assert naive.y.mean() - naive.price.mean() > 0.1, (naive.y.mean(), naive.price.mean())

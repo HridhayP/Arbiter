@@ -38,9 +38,27 @@ def logit(p):
     return np.log(p / (1 - p))
 
 
+def scheduled_close(m: pd.DataFrame) -> pd.Series:
+    """The deadline a market was listed with, which does not depend on the
+    outcome. Polymarket keeps it (endDate). Kalshi overwrites close_time on an
+    early close, so the latest close among the event's markets stands in."""
+    sched = utc_us(m.scheduled_close) if "scheduled_close" in m else m.close_time.copy()
+    is_k = m.venue == "kalshi"
+    ev_max = m[is_k].groupby(m[is_k].event_id.fillna(m[is_k].market_id)).close_time.transform("max")
+    sched[is_k] = ev_max
+    return sched.fillna(m.close_time)
+
+
 def snapshots(markets: pd.DataFrame, candles: pd.DataFrame, max_staleness: pd.Timedelta = pd.Timedelta(hours=6),
-              max_spread: float = 0.10) -> pd.DataFrame:
-    """One row per (market, horizon) with the price at close - horizon.
+              max_spread: float = 0.10, anchor: str = "scheduled") -> pd.DataFrame:
+    """One row per (market, horizon) with the price at anchor - horizon.
+
+    anchor="scheduled" (default) samples before the listed deadline and keeps
+    a market only if it was still open then. That condition is known at the
+    time, so it adds no look-ahead. anchor="close" samples before the
+    *actual* close. That is biased: markets that close early because the
+    event happened ("by date X" resolving YES) are sampled before the surprise
+    instead of at the dead end, which makes longshots look underpriced.
 
     Kalshi rows require both a bid and an ask with spread <= max_spread (so
     the midpoint is a real price, not an empty book); the candle used must be
@@ -48,6 +66,7 @@ def snapshots(markets: pd.DataFrame, candles: pd.DataFrame, max_staleness: pd.Ti
     m = markets[markets.result.isin(["yes", "no"]) & markets.close_time.notna()].copy()
     m["close_time"] = utc_us(m.close_time)
     m["open_time"] = utc_us(m.open_time)
+    m["anchor"] = scheduled_close(m) if anchor == "scheduled" else m.close_time
     m["y"] = (m.result == "yes").astype(int)
     c = candles.copy()
     c["ts"] = utc_us(c.ts)
@@ -59,9 +78,9 @@ def snapshots(markets: pd.DataFrame, candles: pd.DataFrame, max_staleness: pd.Ti
     c = c.sort_values("ts")
     out = []
     for name, h in HORIZONS.items():
-        t = m[["venue", "market_id", "close_time", "open_time"]].copy()
-        t["t"] = utc_us(t.close_time - h)  # timedelta math upcasts to ns
-        t = t[(t.open_time.isna()) | (t.open_time <= t.t)].sort_values("t")
+        t = m[["venue", "market_id", "close_time", "open_time", "anchor"]].copy()
+        t["t"] = utc_us(t.anchor - h)  # timedelta math upcasts to ns
+        t = t[(t.open_time.isna() | (t.open_time <= t.t)) & (t.t < t.close_time)].sort_values("t")
         j = pd.merge_asof(t, c[["venue", "market_id", "ts", "price", "yes_bid", "yes_ask", "spread"]],
                           left_on="t", right_on="ts", by=["venue", "market_id"], direction="backward")
         j = j[j.ts.notna() & (j.t - j.ts <= max_staleness)]
@@ -186,6 +205,18 @@ def run(markets: pd.DataFrame, candles: pd.DataFrame) -> dict:
     for (venue, cat), g in s[s.horizon == "1d"].groupby(["venue", "category"]):
         if len(g) >= 300:
             out.setdefault("by_category_1d", {})[f"{venue}/{cat}"] = fit(g).as_dict()
+    # Markets were sampled by lifetime volume, and upsets attract volume:
+    # if the bias grows with volume, it is (partly) selection.
+    d1 = s[s.horizon == "1d"].copy()
+    d1["tier"] = d1.groupby("venue").volume.transform(lambda v: pd.qcut(v.rank(method="first"), 3, labels=["low", "mid", "high"]))
+    for (venue, tier), g in d1.groupby(["venue", "tier"], observed=True):
+        if len(g) >= 300:
+            out.setdefault("by_volume_tier_1d", {})[f"{venue}/{tier}"] = fit(g).as_dict()
+    # The biased alternative, for comparison: horizons before the actual close.
+    naive = snapshots(markets, candles, anchor="close")
+    for (venue, horizon), g in naive.groupby(["venue", "horizon"]):
+        if len(g) >= 200:
+            out.setdefault("anchored_on_actual_close", {})[f"{venue}/{horizon}"] = fit(g).as_dict()
     for h in HORIZONS:
         r = favorite_strategy(s, h)
         if r:

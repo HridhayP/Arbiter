@@ -118,6 +118,10 @@ def market_row(m: dict, series_meta: dict | None = None) -> dict:
         "open_time": ts(m.get("open_time")),
         "close_time": ts(m.get("close_time")),
         "settle_time": ts(m.get("settlement_ts") or m.get("expiration_time")),
+        # Kalshi overwrites close_time when a market closes early (on YES, for
+        # "by date X" markets) and keeps no original deadline; calibration
+        # uses the latest close in the event as the proxy
+        "scheduled_close": ts(m.get("close_time")),
         "result": m.get("result") or None,
         "strike": _num(m.get("floor_strike")),
         "strike_type": m.get("strike_type"),

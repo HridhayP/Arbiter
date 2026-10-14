@@ -134,6 +134,9 @@ def market_row(m: dict) -> dict | None:
         "open_time": pd.Timestamp(m["startDate"]) if m.get("startDate") else None,
         "close_time": pd.Timestamp(m.get("closedTime") or m.get("endDate")) if (m.get("closedTime") or m.get("endDate")) else None,
         "settle_time": pd.Timestamp(m["closedTime"]) if m.get("closedTime") else None,
+        # closedTime moves with the outcome ("by date X" markets close early on
+        # YES); endDate is the deadline set at listing
+        "scheduled_close": pd.Timestamp(m["endDate"]) if m.get("endDate") else None,
         "result": result,
         "strike": None,
         "strike_type": None,
