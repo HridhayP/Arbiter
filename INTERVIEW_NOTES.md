@@ -22,11 +22,13 @@ In betting markets, longshots tend to be overpriced and favorites underpriced. A
 - **Kalshi** is well calibrated. The 1-day slope is 1.01 (95% CI 0.99–1.03) over 40,552 market snapshots in 13,889 events. Buying favorites loses 0.77¢ per contract after fees (event-clustered t = −8.2): the small edge left in favorites is smaller than the ask plus fees.
 - **Polymarket** prices look too extreme: slope 0.75, with 7¢ contracts winning 15%. But the gap sits in sports markets sampled before kickoff, and Polymarket's history has only hourly prices with no bid or ask. Random error in a price variable pulls a regression slope below 1 even when the true price is calibrated (errors-in-variables). So this isn't claimed as a tradable bias.
 
-### 3. What was the biggest mistake you caught?
+### 3. What was the subtlest bug you found?
 
-My first calibration run showed a strong *reverse* longshot bias: 7¢ Polymarket contracts won 15% of the time. The cause was the sampling time. I sampled "1 day before close", but both venues close a "will X happen by date Y" market early when X happens. So YES markets were sampled just before the surprise, while NO markets were sampled at the dead end, near 0. The close time itself carries the outcome.
+A look-ahead leak hiding in the close time. I sampled prices "1 day before close", but both venues close a "will X happen by date Y" market early when X happens. So YES markets were sampled just before the surprise, while NO markets were sampled at the dead end, near 0. The close time itself carries the outcome.
 
-The fix samples before the *scheduled* deadline and keeps a market only if it was still open then, which is known at that moment. Polymarket keeps the deadline (`endDate`). Kalshi overwrites `close_time`, so the latest close in the event is used as a proxy. A synthetic test with perfectly calibrated by-date markets shows the naive sampling inflating the win rate by 20 points while the fixed version stays calibrated. The forecasting model had the same leak and got the same fix.
+The fix samples before the *scheduled* deadline and keeps a market only if it was still open then, which is known at that moment. Polymarket keeps the deadline (`endDate`). Kalshi overwrites `close_time`, so the latest close in the event is used as a proxy. A synthetic test with perfectly calibrated by-date markets shows the naive sampling inflating the win rate by 20 points while the fixed version stays calibrated. The forecasting features had the same leak and got the same fix.
+
+I'm careful about what this does and doesn't explain. I first suspected it caused Polymarket's too-extreme prices (7¢ contracts winning 15%), but that pattern survived the fix. On the real data the 1-day effect is small (Kalshi slope 1.03 vs 1.01). So the Polymarket result stays in the write-up as an open question with a stated caveat, rather than being explained away.
 
 ### 4. How do you match the same event across two venues?
 

@@ -51,7 +51,7 @@ The recording is short (one evening), so the cross-venue, consistency and market
 
 Telling a real bias apart from noisy prices needs historical quotes, which Polymarket doesn't publish. The recorder is collecting them going forward.
 
-**Sampling before the actual close is biased.** For comparison, with horizons measured from the actual close: Kalshi 1 d slope 1.027, Kalshi 1 h 1.083, Polymarket 1 h 1.033. See [Artifacts caught](#artifacts-caught), item 1.
+**Sampling before the actual close leaks the outcome** (proven on synthetic data; see [Artifacts caught](#artifacts-caught), item 1), but on this data the 1-day difference is small. For comparison, with horizons measured from the actual close: Kalshi 1 d slope 1.027, Kalshi 1 h 1.083, Polymarket 1 h 1.033. See [Artifacts caught](#artifacts-caught), item 1.
 
 ## R2. Cross-venue mispricing
 
@@ -139,7 +139,7 @@ An earlier run, while the data crawls were using the CPU, measured 16.1M events/
 
 Each of these produced a striking "result" before it was found:
 
-1. **Outcome-dependent close times (R1, R5).** Both venues close "by date X" markets early when X happens. Sampling before the actual close caught YES markets just before the surprise, which produced a fake reverse longshot bias and leaked the outcome into forecasting features. The fix measures horizons from the scheduled deadline and requires the market to be open. A synthetic test with calibrated prices shows the naive method inflating the win rate by 20 points.
+1. **Outcome-dependent close times (R1, R5).** Both venues close "by date X" markets early when X happens. So "1 day before the actual close" samples YES markets just before the surprise and NO markets at the dead end: the close time carries the outcome. A synthetic test with perfectly calibrated by-date markets shows this sampling inflating the win rate by 20 points. The fix measures horizons from the scheduled deadline and requires the market to be open. On the real data, the effect at 1 day turned out small (Kalshi slope 1.03 naive vs 1.01 fixed), and it does **not** explain Polymarket's too-extreme prices, which remain with the fix. That's why that pattern is reported with a caveat instead of being dismissed as this artifact.
 2. **Pager duplicates (R3).** Polymarket's gamma API caps pages at 100 and rejects offsets past ~2,000. The date-window crawler duplicated markets on window edges, which created 78 fake neg-risk arbitrages.
 3. **Kalshi events aren't ladders (R3).** One event can hold different quantities (rain in several cities). Grouping strikes by event produced 4,933 fake ladder violations; keying on ticker minus strike left 16 events.
 4. **Incomplete outcome sets (R3).** 548 of 553 sub-$1 Polymarket outcome sets were missing outcomes from the listing.

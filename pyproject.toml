@@ -11,6 +11,8 @@ dependencies = ["numpy", "pandas", "pyarrow", "duckdb", "httpx", "websockets", "
 
 [project.optional-dependencies]
 dev = ["pytest"]
+# cross-venue matching (R2/R5) embeds market titles; pulls in PyTorch, so it is optional
+match = ["sentence-transformers>=3"]
 
 [tool.scikit-build]
 cmake.build-type = "Release"

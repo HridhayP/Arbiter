@@ -63,6 +63,7 @@ Linux or WSL with g++ ≥ 12 and CMake; Python ≥ 3.10.
 
 ```bash
 pip install -e ".[dev]"                     # builds the C++ extension
+pip install -e ".[dev,match]"               # also the embedding model for cross-venue matching (PyTorch, CPU is fine)
 pytest -q                                   # Python tests (C++ bindings included)
 cmake -S . -B build && cmake --build build -j && ctest --test-dir build   # C++ tests
 ./build/arbiter_bench                       # simulator throughput
@@ -99,5 +100,5 @@ Measured on the data described in [RESULTS.md](RESULTS.md): 1.58M markets collec
 - **Snapshot data can't prove passive fills, so the backtester doesn't pretend.** Candle and listing data only show the top of the book, so a quote resting at the touch never fills in replay. The simulator reports zero rather than inventing fills; R4's passive results use recorded depth plus trade prints only.
 - **The collectors are built to survive.** The crawls make 100K+ requests over hours on a laptop, so every raw response is saved atomically and every job is resumable. Network outages retry for up to 30 minutes, a market that fails is skipped instead of killing the run, and the WebSocket reconnects after 60 s of silence. One DNS outage during the build proved this was needed.
 - **Venue quirks are handled explicitly.** Polymarket's gamma API silently caps pages at 100 and rejects offsets past ~2000, so markets are crawled in end-date windows that split when dense, deduplicated across window edges. Before that fix, edge duplicates produced 78 fake neg-risk arbitrages. Kalshi events reuse one event id for different quantities, so ladders are keyed on the ticker minus its strike; before that fix there were 4,933 fake ladder violations.
-- **Deadlines, not close times.** Both venues move a market's close time with its outcome (a "by date X" market closes early when X happens). Sampling prices before the actual close fakes a reverse longshot bias and leaks outcomes into forecasting features, so every horizon is measured from the scheduled deadline, and a market is used only if it was still open at that time.
+- **Deadlines, not close times.** Both venues move a market's close time with its outcome (a "by date X" market closes early when X happens). Sampling prices before the actual close leaks the outcome (a synthetic test shows a 20-point inflation of the win rate), so every horizon is measured from the scheduled deadline, and a market is used only if it was still open at that time.
 - **"No edge" is a result.** Where fees and spreads remove the edge, the result is reported as zero.
