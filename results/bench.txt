@@ -1,0 +1,20 @@
+2026-10-14T00:29:37-05:00
+Running /tmp/arb-build/arbiter_bench
+Run on (22 X 3072 MHz CPU s)
+CPU Caches:
+  L1 Data 48 KiB (x11)
+  L1 Instruction 64 KiB (x11)
+  L2 Unified 2048 KiB (x11)
+  L3 Unified 24576 KiB (x1)
+Load Average: 0.32, 1.72, 3.23
+--------------------------------------------------------------------------------------------------
+Benchmark                                        Time             CPU   Iterations UserCounters...
+--------------------------------------------------------------------------------------------------
+BM_ReplayWithMarketMaker/1000000_mean         47.6 ms         47.6 ms            5 fills=288 items_per_second=21.0293M/s
+BM_ReplayWithMarketMaker/1000000_median       47.3 ms         47.3 ms            5 fills=288 items_per_second=21.1534M/s
+BM_ReplayWithMarketMaker/1000000_stddev      0.670 ms        0.669 ms            5 fills=0 items_per_second=293.295k/s
+BM_ReplayWithMarketMaker/1000000_cv           1.41 %          1.41 %             5 fills=0.00% items_per_second=1.39%
+BM_BookSet_mean                               1.58 ns         1.58 ns            5 items_per_second=633.543M/s
+BM_BookSet_median                             1.58 ns         1.58 ns            5 items_per_second=634.515M/s
+BM_BookSet_stddev                            0.007 ns        0.007 ns            5 items_per_second=2.78106M/s
+BM_BookSet_cv                                 0.44 %          0.44 %             5 items_per_second=0.44%

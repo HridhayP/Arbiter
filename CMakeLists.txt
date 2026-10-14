@@ -10,9 +10,10 @@ endif()
 option(ARBITER_TESTS "Build C++ unit tests (GoogleTest)" ON)
 option(ARBITER_BENCH "Build C++ benchmarks (Google Benchmark)" ON)
 
-add_library(arbiter_core INTERFACE)
-target_include_directories(arbiter_core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
-target_compile_options(arbiter_core INTERFACE -Wall -Wextra -Wpedantic)
+add_library(arbiter_core STATIC cpp/src/sim.cpp)
+target_include_directories(arbiter_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/cpp/include)
+target_compile_options(arbiter_core PRIVATE -Wall -Wextra -Wpedantic)
+set_target_properties(arbiter_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 # Python extension (built by scikit-build-core during `pip install`)
 if(SKBUILD)

@@ -1,0 +1,30 @@
+kalshi_id,poly_text,verdict,note
+KXROLEATEVENTCOACHELLA-27DEC31-BIL,Will Billie Eilish perform at Coachella 2027?,false_match,headliner vs perform
+KXCBRATEHIKE-27-SNB,Will the Swiss National Bank make no change to the SNB policy rate at the December meeting?,false_match,raise before 2027 vs no change in December
+KXALBUMRELEASE-26-KEN,Will Kendrick Lamar be the top artist for 2026?,false_match,album release vs top artist
+KXALBUMRELEASE-26-NIC,Will Nicki Minaj release a new song in 2026?,false_match,album vs song
+KXALBUMRELEASE-26-CHAP,Will Chappell Roan be the top artist for 2026?,false_match,album release vs top artist
+KXALBUMRELEASE-26-SAB,Will Sabrina Carpenter be the top artist for 2026?,false_match,album release vs top artist
+KXALBUMRELEASE-26-FRA,Will Frank Ocean release a new song in 2026?,false_match,album vs song
+KXALBUMRELEASEDATEFRANK-JAN01-28,Will Frank Ocean release an album in 2026?,false_match,2027 vs 2026
+KXROLEATEVENTCOACHELLA-27DEC31-CUA,Will Dua Lipa headline Coachella 2027?,rules_differ,Kalshi: must actually perform as headliner; Polymarket: announced as top-billed headliner. Kalshi YES is the stricter event; long Polymarket YES + long Kalshi NO pays >= 1 except for a surprise/replacement headliner not on the original lineup
+KXROLEATEVENTCOACHELLA-27DEC31-BAD,Will Bad Bunny headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXROLEATEVENTCOACHELLA-27DEC31-TAM,Will Tame Impala headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXROLEATEVENTCOACHELLA-27DEC31-TAY,Will Taylor Swift headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXROLEATEVENTCOACHELLA-27DEC31-OLIV,Will Olivia Rodrigo headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXHURPATHHAWAII-26DEC,Will a hurricane make landfall in Hawaii before 2027?,rules_differ,2026 hurricane season vs any landfall through Dec 31
+KXROLEINPRODUCTIONDOOMSDAY-HAI,Hailee Steinfeld as Kate Bishop?,equivalent,both resolve on casting/appearance
+KXARREST-27JAN-JCLA,Will James Clapper be arrested before 2027?,equivalent,both: arrest by Dec 31 2026 11:59 PM ET
+KXARREST-27JAN-ASCH,Will Adam Schiff be arrested before 2027?,equivalent,same series as Clapper
+KXARREST-27JAN-BCLIN,Will Bill Clinton be arrested before 2027?,equivalent,same series as Clapper
+KXSATOSHIBTCYEAR-27,Will Satoshi move any Bitcoin in 2026?,likely_equivalent,by 2027 vs in 2026; rules not compared
+KXNYSECIRCUIT-27,NYSE marketwide circuit breaker before 2027?,likely_equivalent,rules not compared
+KXALBUMRELEASE-26-EMI,Will Eminem release an album in 2026?,likely_equivalent,"""new album"" vs ""an album""; rules not compared"
+KXRECOGPERSONIRAN-26,US recognizes Reza Pahlavi as leader of Iran in 2026?,likely_equivalent,rules not compared
+KXTOUR-27-SAB,Will Sabrina Carpenter release an album in 2026?,false_match,tour vs album
+KXTOUR-27-JUS,Will Justin Bieber release an album in 2026?,false_match,tour vs album
+KXLIKUDCOUNT-26OCT27-A29,Will Likud win 35 or more seats in the 2026 Israeli legislative election?,false_match,above 29 vs 35 or more (matcher missed the number conflict)
+KXROLEATEVENTCOACHELLA-27DEC31-SAB,Will Sabrina Carpenter headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXROLEATEVENTCOACHELLA-27DEC31-DRA,Will Drake headline Coachella 2027?,rules_differ,same as Dua Lipa
+KXLEAVEOPEC-27,Will another country leave OPEC in 2026?,likely_equivalent,same question; rules not compared; best net 0.37c
+KXROLEINPRODUCTIONDOOMSDAY-HUG,Hugh Jackman as Wolverine?,likely_equivalent,rules not compared; best net 0.03c
